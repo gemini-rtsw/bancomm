@@ -1,7 +1,10 @@
+/* osdClocksFuncs.h
+ * Header file for wrapper functions to operating system dependant clock functions
+ * Created 4 Mar 2016, mdw
+ */
 
-
-#ifndef BCCLOCK_H
-#define BCCLOCK_H
+#ifndef OSDCLOCKFUNCS_H
+#define OSDCLOCKFUNCS_H
 
 #ifdef RTEMS
 #include <rtems.h>
@@ -15,4 +18,4 @@ extern int clock_rate_get(void);
 extern void clock_rate_set(int);
 
 
-#endif /* BCCLOCK_H */
+#endif /* OSDCLOCKFUNCS_H */
