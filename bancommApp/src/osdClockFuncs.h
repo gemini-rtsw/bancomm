@@ -3,14 +3,8 @@
 #ifndef BCCLOCK_H
 #define BCCLOCK_H
 
-#ifdef vxWorks
-#include <sysLib.h>
-#include <tickLib.h>
-#endif
-
 #ifdef RTEMS
 #include <rtems.h>
-/*#include <rtems/clockdrv.h>*/
 #include <libcpu/c_clock.h>
 #endif
 
