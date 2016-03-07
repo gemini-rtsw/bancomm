@@ -6,7 +6,7 @@
 #ifndef OSDCLOCKFUNCS_H
 #define OSDCLOCKFUNCS_H
 
-#ifdef RTEMS
+#if defined (__rtems__)
 #include <rtems.h>
 #include <libcpu/c_clock.h>
 #endif

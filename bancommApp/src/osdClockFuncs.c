@@ -3,14 +3,14 @@
 
 void sysClockOn(void)
 {
-#ifdef RTEMS
+#if defined (__rtems__)
    clockOn(NULL);
 #endif
 }
 
 void sysClockOff(void)
 {
-#ifdef RTEMS
+#if defined  (__rtems__)
    clockOff(NULL);
 #endif
 }
@@ -18,7 +18,7 @@ void sysClockOff(void)
 
 void clock_tick(void) 
 {
-#ifdef RTEMS
+#if defined (__rtems__)
    rtems_clock_tick();
 #endif
 }
@@ -26,7 +26,7 @@ void clock_tick(void)
 
 int clock_rate_get(void) 
 {
-#ifdef RTEMS
+#if defined (__rtems__)
    rtems_interval ticksPerSecond;
    rtems_clock_get(RTEMS_CLOCK_GET_TICKS_PER_SECOND, &ticksPerSecond);
    return (double)ticksPerSecond;
