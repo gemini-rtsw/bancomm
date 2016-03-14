@@ -1,3 +1,6 @@
+registrar( bc635_reportRegister )
+variable( altIntCounter, int )
+variable( bcIntCounter, int )
 device(ai,        VME_IO, devAiBc635, "Bancomm 635")
 device(ao,        VME_IO, devAoBc635, "Bancomm 635")
 device(stringin,  VME_IO, devSiBc635, "Bancomm 635")

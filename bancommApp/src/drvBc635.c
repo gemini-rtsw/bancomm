@@ -90,6 +90,7 @@
 #include <epicsTimer.h>
 #include <epicsTime.h>
 #include <epicsExport.h>
+#include <iocsh.h>
 
 #include <devLib.h>
 #include <string.h>
@@ -176,11 +177,12 @@ static int sysClkRateWas;             /* Saved value of system clock */
 static int tickFrequency;             /* System clock tick frequency */
 static int bcUseper;                  /* Whether to use BC periodics for sys clock */
 static int bcConfiguredOK = 0;        /* Whether have a Bancomm at all */
-static int bcYearNumber = 0;          /* The current year number */
+static int bcYearNumber = 42;          /* The current year number */
 static int bcYearEpoch = 0;           /* The epoch (wrt 1970) of Jan 1, Oh UTC of current year */
 static int bcLastEpoch = 0;           /* Last year's epoch, saved when year changes */
 static int bcIntPerTick = 1;          /* Number of interrupts per clock tick */
 static int bcIntCounter = 0;          /* Count all interrupts */
+static int altIntCounter = 0;	      /* Count alternate interrupts */
 
 int bcYearMonitorStarted = 0;         /* Flag indicating Year Monitor task running */
 
@@ -352,6 +354,8 @@ int bcHardwareSetup (void)
         /* sysClkRateWas = sysClkRateGet(); */ /* VWS */ /* Remember clock rate at startup */
         sysClkRateWas = epicsThreadSleepQuantum(); /* Remember clock rate at startup */
         tickFrequency = sysClkRateWas;    /* Initial value for the clock tick frequency */
+        printf("BC635 setup: initial clock tick frequency: %d\n", tickFrequency);
+
     }
     return OK;
 }
@@ -410,7 +414,8 @@ int bc635_init(void)
     bcSendTfp(str_offset);        /* Send packet G for offset control */
     bcSendTfp("M+00");            /* Time offset zero - */
                     /* display UTC unmodified */
-    bcStartYearMonitor();        /* Start the year monitoring task */
+    bcStartYearMonitor();
+    /* Start the year monitoring task */
 
     return OK;
 } 
@@ -500,7 +505,11 @@ void isr_bc635 (void *p)
                 HadPerint = TRUE;    
 
                sysClockOff(); 
-               clock_rate_set(tickFrequency);
+               if(! clock_rate_set(tickFrequency) == OK) {
+	          /*Trap something here on error, but this is an ISR... so caution.*/	       
+	       }
+
+	       
             }
             bcIntCounter++;                /* Increment interrupt count */
             if (bcUsrClock != NULL) (*bcUsrClock)(bcIntCounter);    /* Call user routine */
@@ -515,11 +524,13 @@ void isr_bc635 (void *p)
     {
         if (intnum != 2)
         {
+
             tmask = 0x01 << (intnum - 1);        /* Test value for interrupt */
  
             /* Check for interrupt bit set - request I/O scan, but only if ioscanpvt is valid */
             if ( ((bcistatus & tmask) & bcimask) != 0)
             {
+	    	altIntCounter++;
                 if (ioscanpvt[intnum-1] != NULL)
                     scanIoRequest(ioscanpvt[intnum-1]);
                 pbc635->intstat = pbc635->intstat | tmask;   /* Clear interrupt status bit */
@@ -712,6 +723,8 @@ int bc635_read (double *prval)
     for(i=0; i<10; i++)
         stime[i] = pbc635->time[i];
     epicsInterruptUnlock(lockKey);            /* Re-enable interrupts */
+    
+    //printf("bc110\n");
     return bcRegsToTime(prval, stime);    /* Finish off */
 }
 
@@ -798,6 +811,8 @@ int bcRegsToTime (double *prval, unsigned char *stime)
     static unsigned short prevdaynum;
 
     days = (stime[1] & 0xf)*100 + bcdtoi(stime[2]);
+    if (days == 0) days++;
+
     if (days == 1 && prevdaynum > 364)    /* Check for end of year */
     {
         bcYearNumber++;            /* Happy New Year! */
@@ -839,6 +854,7 @@ int bcRegsToTime (double *prval, unsigned char *stime)
     else
         status = (stime[1] & 0x70) >> 4;
 
+    //printf("bc120: days=%d,status=%d\n", days,status);
     return status;
 }
 
@@ -1029,6 +1045,7 @@ int bcSetEpoch(const int year)
     gtime.tm_mday = 1;
     gtime.tm_mon = 0;
     gtime.tm_year = year - 1900;    /* Date for this year, Jan 1st, 00:00:00 UTC */
+    printf("bcSetEpoch year is %d\n", year);
     bcYearEpoch = mktime(&gtime);    /* Calculate current start of year epoch */
     return 0;
 }
@@ -1055,9 +1072,11 @@ int bcYearMonitor(void)
     int status,year;
     int first_try_count = 0;
     struct tm *gtime;
+    
+   printf("Setting year to 2016...");
+   bcSetEpoch(2016);
 
-
-    epicsThreadSleep(clock_rate_get()  * 5);
+    epicsThreadSleep( 1);
     
     do {
         first_try_count++;
@@ -1072,11 +1091,14 @@ int bcYearMonitor(void)
         }   
         else {
             year = 0;
-            epicsThreadSleep(clock_rate_get() * 5); /* Problem? - wait a few seconds */
+            epicsThreadSleep( 5); /* Problem? - wait a few seconds */
         }   
     } while ((status != 0) || year < 1994 || year > 2049);
 
-    epicsThreadSleep(clock_rate_get() * 60 * (30 - gtime->tm_min));    /* Wait for xx:30 */
+    /* Wait for xx:30 */
+    /*
+      epicsThreadSleep(clock_rate_get() * 60 * (30 - gtime->tm_min));
+     */
 
     while (1) {                /* Now loop forever */
         status = NTPgetTime(&gtime);
@@ -1087,7 +1109,7 @@ int bcYearMonitor(void)
                 bcSetEpoch(year);        /* Calculate and set epoch */
             }
         }
-        epicsThreadSleep(clock_rate_get() * YEAR_MONITOR_SLEEP);    /* Now wait specified number of seconds (1 hour) */
+        epicsThreadSleep( YEAR_MONITOR_SLEEP);    /* Now wait specified number of seconds (1 hour) */
     }
 }
 
@@ -1110,9 +1132,9 @@ static int bcStartYearMonitor(void)
         bcYearMonitorStarted = 1;
 
                     /* Don't rush it - wait a few seconds */
-        epicsThreadSleep(clock_rate_get() * 5);
+        epicsThreadSleep(1);
 
-        if( (epicsThreadCreate("bcYearMonitor", 100, 5000, (EPICSTHREADFUNC)bcYearMonitor, NULL) ) )
+        if( (epicsThreadCreate("bcYearMonitor", 100, epicsThreadGetStackSize(epicsThreadStackMedium), (EPICSTHREADFUNC)bcYearMonitor, NULL) ) )
         {
             bcYearMonitorStarted = 0;
             return ERROR;
@@ -1187,7 +1209,8 @@ void BCconfigure
     }
     bc635IntEnable(2,"");                /* Enable Bancomm periodic interrupts */
     bcClkRateSet(intPerSecond, intPerTick);        /* Set up the interrupt and tick rate */
-    bcStartYearMonitor();        /* Start the year monitoring task */
+    /* bcStartYearMonitor(); */
+    /* Start the year monitoring task */
 
     /* Register the time card with EPICS time */
     generalTimeRegisterCurrentProvider("bc635", 20, &bc635_epicsGetTime);
@@ -1310,3 +1333,28 @@ void bcSendOcode(char *charptr )
     if( count == 200 )
         printf("Error: Timed out waiting for response to %s\n", charptr);
 }
+
+/* Register these symbols for use by IOC code */
+/* Information needed by iocsh */
+static const iocshArg     bc635_reportArg0 = {"master", iocshArgInt};
+
+static const iocshArg    *bc635_reportArgs[] = {
+	&bc635_reportArg0
+};
+
+static const iocshFuncDef bc635_reportFuncDef = {"bc635_report", 1, bc635_reportArgs};
+
+/* Wrapper called by iocsh, selects the argument types that bc635_report needs */
+static void bc635_reportCallFunc(const iocshArgBuf *args) {
+    bc635_report(args[0].ival);
+}
+
+/* Registration routine, runs at startup */
+static void bc635_reportRegister(void) {
+    iocshRegister(&bc635_reportFuncDef, bc635_reportCallFunc);
+}
+
+epicsExportRegistrar(bc635_reportRegister);
+epicsExportAddress(int, altIntCounter);
+epicsExportAddress(int, bcIntCounter);
+

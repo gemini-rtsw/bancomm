@@ -15,5 +15,6 @@ bancomm_SRCS += devBc635.c
 bancomm_SRCS += drvBc635.c
 
 INC          += bc635.h
+INC          += osdClockFuncs.h
 
 include $(TOP)/configure/RULES

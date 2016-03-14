@@ -1,5 +1,4 @@
-#include "osdClockFuncs.h"
-
+#include "bc635.h"
 
 void sysClockOn(void)
 {
@@ -35,6 +34,7 @@ return -1;
 #endif
 }
 
-void clock_rate_set(int rate)
+int clock_rate_set(int rate)
 {
+return OK;
 }

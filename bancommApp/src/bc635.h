@@ -47,6 +47,7 @@
 #ifndef INCbc635h
 #define INCbc635h
 
+#include "osdClockFuncs.h"
 
 #define OK 0
 #define ERROR (-1)
