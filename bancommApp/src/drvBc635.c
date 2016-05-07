@@ -1336,7 +1336,7 @@ void bcSendOcode(char *charptr )
 
 /* Register these symbols for use by IOC code */
 /* Information needed by iocsh */
-static const iocshArg     bc635_reportArg0 = {"master", iocshArgInt};
+static const iocshArg     bc635_reportArg0 = {"interest_level", iocshArgInt};
 
 static const iocshArg    *bc635_reportArgs[] = {
 	&bc635_reportArg0
@@ -1354,7 +1354,36 @@ static void bc635_reportRegister(void) {
     iocshRegister(&bc635_reportFuncDef, bc635_reportCallFunc);
 }
 
+/* Register these symbols for use by IOC code */
+/* Information needed by iocsh */
+static const iocshArg     BCconfigureArg0 = {"master", iocshArgInt};  /* TRUE for Master IOC with bc637 GPS receiver */
+static const iocshArg     BCconfigureArg1 = {"useleap", iocshArgInt};  /* FALSE = use UTC; TRUE = GPS time, no leap secs */
+static const iocshArg     BCconfigureArg2 = {"intPerSecond", iocshArgInt};  /* Bancomm Periodic Frequency in Hz */
+static const iocshArg     BCconfigureArg3 = {"intPerTick", iocshArgInt};  /* Number of periodic interrupts per VxWorks system clock tick */
+static const iocshArg     BCconfigureArg4 = {"Offset", iocshArgInt};  /* Offset in microseconds relative to input reference, +ve = correction for delay */
+
+static const iocshArg    *BCconfigureArgs[] = {
+	&BCconfigureArg0,
+	&BCconfigureArg1,
+	&BCconfigureArg2,
+	&BCconfigureArg3,
+	&BCconfigureArg4
+};
+
+static const iocshFuncDef BCconfigureFuncDef = {"BCconfigure", 5, BCconfigureArgs};
+
+/* Wrapper called by iocsh, selects the argument types that bc635_report needs */
+static void BCconfigureCallFunc(const iocshArgBuf *args) {
+    BCconfigure(args[0].ival, args[1].ival, args[2].ival, args[3].ival, args[4].ival );
+}
+
+/* Registration routine, runs at startup */
+static void BCconfigureRegister(void) {
+    iocshRegister(&BCconfigureFuncDef, BCconfigureCallFunc);
+}
+
 epicsExportRegistrar(bc635_reportRegister);
+epicsExportRegistrar(BCconfigureRegister);
 epicsExportAddress(int, altIntCounter);
 epicsExportAddress(int, bcIntCounter);
 

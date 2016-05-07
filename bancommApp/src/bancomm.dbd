@@ -1,4 +1,5 @@
 registrar( bc635_reportRegister )
+registrar( BCconfigureRegister )
 variable( altIntCounter, int )
 variable( bcIntCounter, int )
 device(ai,        VME_IO, devAiBc635, "Bancomm 635")
