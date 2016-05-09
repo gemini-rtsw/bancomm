@@ -182,6 +182,7 @@ static int bcYearEpoch = 0;           /* The epoch (wrt 1970) of Jan 1, Oh UTC o
 static int bcLastEpoch = 0;           /* Last year's epoch, saved when year changes */
 static int bcIntPerTick = 1;          /* Number of interrupts per clock tick */
 static int bcIntCounter = 0;          /* Count all interrupts */
+static int bc_tick = 0;          /* Count all interrupts */
 static int altIntCounter = 0;	      /* Count alternate interrupts */
 
 int bcYearMonitorStarted = 0;         /* Flag indicating Year Monitor task running */
@@ -505,16 +506,22 @@ void isr_bc635 (void *p)
                 HadPerint = TRUE;    
 
                sysClockOff(); 
-               if(! clock_rate_set(tickFrequency) == OK) {
-	          /*Trap something here on error, but this is an ISR... so caution.*/	       
-	       }
 
-	       
+               //if(! clock_rate_set(tickFrequency) == OK) {
+	       //   /*Trap something here on error, but this is an ISR... so caution.*/	       
+	       //}
             }
-            bcIntCounter++;                /* Increment interrupt count */
-            if (bcUsrClock != NULL) (*bcUsrClock)(bcIntCounter);    /* Call user routine */
-            if (bcIntCounter%bcIntPerTick == 0)    /* If right number of ticks */
-                clock_tick();    /* Announce system clock tick */ 
+
+            /* Increment interrupt count i.e., we actually got this interrupt*/
+            bcIntCounter++; 
+
+            /* Call user routine if it has been defined */
+            if (bcUsrClock != NULL) (*bcUsrClock)(bcIntCounter);    
+
+            if (bcIntCounter % bcIntPerTick == 0) {    /* If right number of ticks */
+                bc_tick++;                             /* Increment tick announce count */
+                //clock_tick();                          /* Announce system clock tick */ 
+            }
         }
         pbc635->intstat = pbc635->intstat | 0x02;    /* Clear interrupt status bit */
     }
@@ -1190,11 +1197,11 @@ void bcSetRTC(void)
 */
 void BCconfigure
 (
-    const int MasterIOC,    /* TRUE for Master IOC with bc637 GPS receiver */
-    const int NoLeapSecs,    /* FALSE = use UTC; TRUE = GPS time, no leap secs */
-    const int intPerSecond,    /* Bancomm Periodic Frequency in Hz */
-    const int intPerTick,    /* Number of periodic interrupts per VxWorks system clock tick */
-    const int Offset    /* Offset in microseconds relative to input reference, +ve = correction for delay */
+    const int MasterIOC,        /* TRUE for Master IOC with bc637 GPS receiver */
+    const int NoLeapSecs,       /* FALSE = use UTC; TRUE = GPS time, no leap secs */
+    const int intPerSecond,     /* Bancomm Periodic Frequency in Hz */
+    const int intPerTick,       /* Number of periodic interrupts per system clock tick */
+    const int Offset            /* Offset in microseconds relative to input reference, +ve = correction for delay */
 )
 {
     int status;
@@ -1213,7 +1220,7 @@ void BCconfigure
     /* Start the year monitoring task */
 
     /* Register the time card with EPICS time */
-    generalTimeRegisterCurrentProvider("bc635", 20, &bc635_epicsGetTime);
+    //generalTimeRegisterCurrentProvider("bc635", 20, &bc635_epicsGetTime);
 }
 
 /**********************************************************************************************************
@@ -1386,4 +1393,5 @@ epicsExportRegistrar(bc635_reportRegister);
 epicsExportRegistrar(BCconfigureRegister);
 epicsExportAddress(int, altIntCounter);
 epicsExportAddress(int, bcIntCounter);
+epicsExportAddress(int, bc_tick);
 
