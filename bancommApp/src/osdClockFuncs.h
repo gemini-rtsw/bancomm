@@ -8,7 +8,7 @@
 
 #if defined (__rtems__)
 #include <rtems.h>
-#include <libcpu/c_clock.h>
+#include <bsp.h>
 #endif
 
 extern void sysClockOn(void);

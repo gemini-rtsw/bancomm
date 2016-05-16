@@ -64,8 +64,8 @@ extern int	bcSendTfp(char *);
 extern void	bcSetRTC(void);
 extern int	bcSetEpoch (const int);
 extern int	bcRegsToTime (double *, unsigned char *);
-extern int	bc635_report (int);
-extern int	bc635_init (void);
+extern long	bc635_report (int);
+extern long	bc635_init (void);
 extern int      bcTestCard( void );
 extern int      bcGetGpsLeap( void );
 

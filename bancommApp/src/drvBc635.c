@@ -89,9 +89,13 @@
 #include <epicsInterrupt.h>
 #include <epicsTimer.h>
 #include <epicsTime.h>
+#include <epicsEvent.h>
+#include <epicsExit.h>
+#include <epicsMutex.h>
 #include <epicsExport.h>
+#include <generalTimeSup.h>
 #include <iocsh.h>
-
+#include <taskwd.h>
 #include <devLib.h>
 #include <string.h>
 #include <drvSup.h>
@@ -100,7 +104,6 @@
 #include <errMdef.h>
 #include <errlog.h>
 #include <envDefs.h>
-#include <generalTimeSup.h>
 
 #include "bc635.h"
 #include "osdClockFuncs.h"
@@ -111,7 +114,6 @@
 
 #define TS_1900_TO_UNIX_EPOCH 2208988800UL
 #define TS_UNIX_TO_EPICS_EPOCH 631152000UL
-
 #define BC635_ADDR0    0x4000
 #define BC635VEC    0x40
 #define BC635LVL    1
@@ -132,7 +134,6 @@
 #define BC635CMD_HBEN       0x02    /* Set=Enable periodic time capture */
 #define BC635CMD_LOCKEN     0x01    /* Set=Enable event lockout */
 
-
 /*bc635 memory structure*/
 typedef struct {
     unsigned short dev_id;      /* VXIbus ID Register */
@@ -152,8 +153,12 @@ typedef struct {
     unsigned short level;       /* Interrupt level */
 } volatile bc635Regs_t;
 
-static long report();
-static long init();
+//static long report();
+//static long init();
+void bc635Time_Init(int);
+int bc635Time_Report(int);
+static int bc635TimeGetCurrent(epicsTimeStamp *);
+int bc635TimeSetTpPrio(int); 
 
 static int bcStartYearMonitor();
 
@@ -163,8 +168,8 @@ struct {
         DRVSUPFUN       init;
 } drvBc635={
         2,
-        report,
-        init};
+        bc635_report,
+        bc635_init};
 epicsExportAddress(drvet, drvBc635);
 
 static bc635Regs_t  *pbc635 = NULL;   /* Pointer to bc635 register structure */
@@ -177,15 +182,17 @@ static int sysClkRateWas;             /* Saved value of system clock */
 static int tickFrequency;             /* System clock tick frequency */
 static int bcUseper;                  /* Whether to use BC periodics for sys clock */
 static int bcConfiguredOK = 0;        /* Whether have a Bancomm at all */
-static int bcYearNumber = 42;          /* The current year number */
+static int bcYearNumber = 42;         /* The current year number */
 static int bcYearEpoch = 0;           /* The epoch (wrt 1970) of Jan 1, Oh UTC of current year */
 static int bcLastEpoch = 0;           /* Last year's epoch, saved when year changes */
 static int bcIntPerTick = 1;          /* Number of interrupts per clock tick */
 static int bcIntCounter = 0;          /* Count all interrupts */
-static int bc_tick = 0;          /* Count all interrupts */
+static int bcTickCnt = 0;             /* Count all interrupts */
 static int altIntCounter = 0;	      /* Count alternate interrupts */
 
 int bcYearMonitorStarted = 0;         /* Flag indicating Year Monitor task running */
+
+static int bc635TimeTpPrio = 20;    /* Time provider priority, default=20, negative to disable bc635 time provider */
 
 /* Declare pointer to user definable function called on each interrupt */
 void (*bcUsrClock)(const int icount) = NULL;
@@ -193,6 +200,7 @@ void (*bcUsrClock)(const int icount) = NULL;
 /* Following two routines are wrap-arounds for the local report and init functions 
 *  to provide standard calls from EPICS device support 
 */
+#if 0
 static long report(int level)
 {
     bc635_report(level);
@@ -204,6 +212,7 @@ static long init()
     bc635_init();
     return(0);
 }
+#endif
 
 /**********************************************************************************************************
 *
@@ -352,8 +361,8 @@ int bcHardwareSetup (void)
 
         HadPerint = FALSE;        /* Flag to be set when a BC635 periodic interrupt occurs */
         bcUseper  = FALSE;        /* Flag  = whether to use BC periodics for sys clock */
-        /* sysClkRateWas = sysClkRateGet(); */ /* VWS */ /* Remember clock rate at startup */
-        sysClkRateWas = epicsThreadSleepQuantum(); /* Remember clock rate at startup */
+        sysClkRateWas =  clock_rate_get();
+        //sysClkRateWas = epicsThreadSleepQuantum();
         tickFrequency = sysClkRateWas;    /* Initial value for the clock tick frequency */
         printf("BC635 setup: initial clock tick frequency: %d\n", tickFrequency);
 
@@ -374,14 +383,14 @@ int bcHardwareSetup (void)
 * NOMANUAL
 */
 
-int bc635_init(void)
+long bc635_init()
 {
     int status;
     char str_offset[9];            /* String for offset value */
 
     if (pbc635 == NULL)            /* Not previously setup? */
-    if ((status = bcHardwareSetup()) != OK)
-        return status;    
+       if ((status = bcHardwareSetup()) != OK)
+           return status;    
 
     /* Check whether this is master (i.e. BC637 GPS board.
      * If so, set to GPS mode. The value of the GPS leap seconds
@@ -415,8 +424,8 @@ int bc635_init(void)
     bcSendTfp(str_offset);        /* Send packet G for offset control */
     bcSendTfp("M+00");            /* Time offset zero - */
                     /* display UTC unmodified */
-    bcStartYearMonitor();
-    /* Start the year monitoring task */
+
+     bcStartYearMonitor();  /* Start the year monitoring task */
 
     return OK;
 } 
@@ -507,9 +516,10 @@ void isr_bc635 (void *p)
 
                sysClockOff(); 
 
-               //if(! clock_rate_set(tickFrequency) == OK) {
+               if(! (clock_rate_set(tickFrequency) == OK)) {
+
 	       //   /*Trap something here on error, but this is an ISR... so caution.*/	       
-	       //}
+	       }
             }
 
             /* Increment interrupt count i.e., we actually got this interrupt*/
@@ -519,8 +529,8 @@ void isr_bc635 (void *p)
             if (bcUsrClock != NULL) (*bcUsrClock)(bcIntCounter);    
 
             if (bcIntCounter % bcIntPerTick == 0) {    /* If right number of ticks */
-                bc_tick++;                             /* Increment tick announce count */
-                //clock_tick();                          /* Announce system clock tick */ 
+                bcTickCnt++;                             /* Increment tick announce count */
+                clock_tick();                          /* Announce system clock tick */ 
             }
         }
         pbc635->intstat = pbc635->intstat | 0x02;    /* Clear interrupt status bit */
@@ -621,7 +631,7 @@ void bc635SetPeriod (const int hzval, const int intpertick, char *tfpstring)
     /* If system clock rate is different, also announce */
     if (intpertick  < 2) hztick = hzint;
         else hztick = hzint/intpertick;
-    printf("VxWorks system clock frequency = %7.3f Hz\n",hztick);
+    printf("System clock frequency = %7.3f Hz\n",hztick);
 }
 
 /**********************************************************************************************************
@@ -731,37 +741,7 @@ int bc635_read (double *prval)
         stime[i] = pbc635->time[i];
     epicsInterruptUnlock(lockKey);            /* Re-enable interrupts */
     
-    //printf("bc110\n");
     return bcRegsToTime(prval, stime);    /* Finish off */
-}
-
-/**********************************************************************************************************
-* 
-*  bc635_epicsGetTime - Function to register with EPICS for reading the current time
-*
-* Read the current time registers and return the time 
-* as an epicsTimeStamp
-*
-* RETURNS:
-* OK or errors (no Bancomm or Bancomm status bit field)
-*
-*/ 
-/* pDest = Current time as an EPICS time stamp */
-static int bc635_epicsGetTime (epicsTimeStamp *pDest)
-{
-    double cTime = 0.0;
-    int status = 0;
-
-    if ((status = bc635_read (&cTime)) & (~0x07))
-    {
-        /*printf("cTime: %lf\n", cTime);*/
-        return epicsTimeERROR;
-    }
-
-    pDest->secPastEpoch = (epicsUInt32)cTime - (epicsUInt32)(POSIX_TIME_AT_EPICS_EPOCH);
-    /*printf("*** EPICS seconds %d\n", pDest->secPastEpoch);*/
-    pDest->nsec = (epicsUInt32)((cTime - (double)(POSIX_TIME_AT_EPICS_EPOCH) - (double)(pDest->secPastEpoch)) * 1000000000.0);
-    return epicsTimeOK;
 }
 
 
@@ -814,7 +794,7 @@ int bcRegsToTime (double *prval, unsigned char *stime)
 {
     register unsigned short days, hours, minutes, seconds;
     register unsigned long useconds;
-    register int status;
+    register int status = OK;
     static unsigned short prevdaynum;
 
     days = (stime[1] & 0xf)*100 + bcdtoi(stime[2]);
@@ -822,9 +802,9 @@ int bcRegsToTime (double *prval, unsigned char *stime)
 
     if (days == 1 && prevdaynum > 364)    /* Check for end of year */
     {
-        bcYearNumber++;            /* Happy New Year! */
+        bcYearNumber++;               /* Happy New Year! */
         bcLastEpoch = bcYearEpoch;    /* Save last year's Epoch */
-        bcSetEpoch(bcYearNumber);    /* Set start of year epoch */
+        bcSetEpoch(bcYearNumber);     /* Set start of year epoch */
     }
     hours = bcdtoi(stime[3]);
     minutes = bcdtoi(stime[4]);
@@ -851,6 +831,8 @@ int bcRegsToTime (double *prval, unsigned char *stime)
             seconds > 61 || useconds > 999999)
     {
         status = -1;
+        printf("days=%d, hours=%d, minutes=%d, seconds=%d, usecs=%ld\n",
+         days, hours, minutes, seconds, useconds);
     }
 
     /* and check time status for errors :
@@ -861,7 +843,6 @@ int bcRegsToTime (double *prval, unsigned char *stime)
     else
         status = (stime[1] & 0x70) >> 4;
 
-    //printf("bc120: days=%d,status=%d\n", days,status);
     return status;
 }
 
@@ -922,14 +903,14 @@ int bcClkRateSet (int intPerSecond, int intPerTick)
         tickFrequency = intPerSecond/bcIntPerTick;
         HadPerint = FALSE;        /* Wait for interrupt flag */
         bcUseper = TRUE;        /* Set flag to use BC periodics */
-                    /* for sys clock */
+        //clock_rate_set(tickFrequency);
+        //sysClockOff();
     }
     else
     {                    /* Input value was zero - */
                     /* re-enable system clock */
 
-        sysClockOn(); 
-        clock_rate_set(sysClkRateWas);    /* restore clock rate */
+        //sysClockOn(); 
 
                     /* Ensure interrupt source disabled */
         pbc635->mask = pbc635->mask & 0xFD;
@@ -938,7 +919,8 @@ int bcClkRateSet (int intPerSecond, int intPerTick)
         bcUseper = FALSE;        /* Clear flag to use BC periodics */
                     /* for sys clock */
         bcIntPerTick = 1;
-        /* printf("System clock re-enabled. Rate = %d Hz\n",clock_rate_get()); */ 
+        clock_rate_set(sysClkRateWas);    /* restore clock rate */
+        printf("System clock re-enabled. Rate = %d Hz\n",clock_rate_get()); 
     }
 
     return OK;
@@ -984,7 +966,7 @@ int bc635_write (const unsigned short signal, const double value)
 *
 * NOMANUAL
 */
-int bc635_report (int level) 
+long bc635_report (int level) 
 {
     if (bcTestCard() != OK)
     {
@@ -1019,6 +1001,7 @@ int NTPgetTime (struct tm **gtime)
     struct timespec sp;
     time_t utime;
 
+    /* note: this doesn't necessarily get the time from an NTP server.... */
     if (epicsTimeGetCurrent(&ets) != epicsTimeOK)
         return -1;            /* If error, return year as -1 */
                     /* NTP epoch is 1900 */
@@ -1080,10 +1063,6 @@ int bcYearMonitor(void)
     int first_try_count = 0;
     struct tm *gtime;
     
-   printf("Setting year to 2016...");
-   bcSetEpoch(2016);
-
-    epicsThreadSleep( 1);
     
     do {
         first_try_count++;
@@ -1112,11 +1091,14 @@ int bcYearMonitor(void)
         if (status == 0) {
             year = 1900 + gtime->tm_year;    /* add 1900 to get year number */
             if (year > 1993 && year < 2050) {    /* If value OK, only during epoch 1994-2049 */
-                bcYearNumber = year;        /* Set year number */
-                bcSetEpoch(year);        /* Calculate and set epoch */
+               if(bcYearNumber != year) {
+                  bcYearNumber = year;        /* Set year number */
+                  bcSetEpoch(year);           /* Calculate and set epoch */
+               }
             }
         }
-        epicsThreadSleep( YEAR_MONITOR_SLEEP);    /* Now wait specified number of seconds (1 hour) */
+         epicsThreadSleep(YEAR_MONITOR_SLEEP);   /* Now wait specified number of seconds (1 hour) */
+         /* epicsThreadSleep(60.0);  */
     }
 }
 
@@ -1138,10 +1120,13 @@ static int bcStartYearMonitor(void)
     {
         bcYearMonitorStarted = 1;
 
-                    /* Don't rush it - wait a few seconds */
+        /* Don't rush it - wait a few seconds */
         epicsThreadSleep(1);
 
-        if( (epicsThreadCreate("bcYearMonitor", 100, epicsThreadGetStackSize(epicsThreadStackMedium), (EPICSTHREADFUNC)bcYearMonitor, NULL) ) )
+        if( (epicsThreadCreate("bcYearMonitor", 
+                                100, 
+                                epicsThreadGetStackSize(epicsThreadStackMedium), 
+                                (EPICSTHREADFUNC)bcYearMonitor, NULL) ) )
         {
             bcYearMonitorStarted = 0;
             return ERROR;
@@ -1168,11 +1153,13 @@ void bcSetRTC(void)
     double fracsec;
     time_t utime;
 
-    epicsTimeGetCurrent(&ets);
+    //epicsTimeGetCurrent(&ets);
+    generalTimeGetExceptPriority(&ets, &bc635TimeTpPrio, 1); /* don't get current time from Bancomm board! */
     epicsTimeToTimespec(&sp, &ets); /* Convert EPICS timestamp to POSIX struct timespec */
     fracsec = 1.0 - (sp.tv_nsec/1000000000.0);
                     /* NTP epoch is 1900 */
     utime = sp.tv_sec - TS_1900_TO_UNIX_EPOCH;
+//printf("ntp secs: %d; unix secs: %d\n", sp.tv_sec,utime);
     gtime = gmtime(&utime);        /* Convert to broken down time */
                     /* in struct tm */
     sprintf(rtctime,"L%02d%02d%02d%02d%02d%02d",
@@ -1181,9 +1168,12 @@ void bcSetRTC(void)
     printf("TFP packet for RTC = %s\n",rtctime);
                     /* wait for approx. next second tick */
     /* (void) taskDelay((int)(fracsec * clock_rate_get()) - 1); */ 
-    epicsThreadSleep((int)(fracsec * epicsThreadSleepQuantum()) - 1);
+    //epicsThreadSleep((int)(fracsec * epicsThreadSleepQuantum()) - 1);
+    epicsThreadSleep((int)(fracsec));
     bcSendTfp(rtctime);
 }
+
+
 
 /**********************************************************************************************************
 * 
@@ -1216,11 +1206,12 @@ void BCconfigure
     }
     bc635IntEnable(2,"");                /* Enable Bancomm periodic interrupts */
     bcClkRateSet(intPerSecond, intPerTick);        /* Set up the interrupt and tick rate */
-    /* bcStartYearMonitor(); */
-    /* Start the year monitoring task */
 
-    /* Register the time card with EPICS time */
-    //generalTimeRegisterCurrentProvider("bc635", 20, &bc635_epicsGetTime);
+
+    /* Start up the BC635 Time Provider */
+    if(bc635TimeTpPrio >= 0)
+       bc635Time_Init(bc635TimeTpPrio);
+    bc635Time_Report(1);
 }
 
 /**********************************************************************************************************
@@ -1344,11 +1335,7 @@ void bcSendOcode(char *charptr )
 /* Register these symbols for use by IOC code */
 /* Information needed by iocsh */
 static const iocshArg     bc635_reportArg0 = {"interest_level", iocshArgInt};
-
-static const iocshArg    *bc635_reportArgs[] = {
-	&bc635_reportArg0
-};
-
+static const iocshArg    *bc635_reportArgs[] = { &bc635_reportArg0 };
 static const iocshFuncDef bc635_reportFuncDef = {"bc635_report", 1, bc635_reportArgs};
 
 /* Wrapper called by iocsh, selects the argument types that bc635_report needs */
@@ -1374,10 +1361,10 @@ static const iocshArg    *BCconfigureArgs[] = {
 	&BCconfigureArg1,
 	&BCconfigureArg2,
 	&BCconfigureArg3,
-	&BCconfigureArg4
+	&BCconfigureArg4,
 };
 
-static const iocshFuncDef BCconfigureFuncDef = {"BCconfigure", 5, BCconfigureArgs};
+static const iocshFuncDef BCconfigureFuncDef = {"BCconfigure", 6, BCconfigureArgs};
 
 /* Wrapper called by iocsh, selects the argument types that bc635_report needs */
 static void BCconfigureCallFunc(const iocshArgBuf *args) {
@@ -1393,5 +1380,155 @@ epicsExportRegistrar(bc635_reportRegister);
 epicsExportRegistrar(BCconfigureRegister);
 epicsExportAddress(int, altIntCounter);
 epicsExportAddress(int, bcIntCounter);
-epicsExportAddress(int, bc_tick);
+epicsExportAddress(int, bcTickCnt);
+
+
+
+/*********************************************************************/
+/*   EPICS Time Provider section: maybe should be in a separate file */
+
+#define NSEC_PER_SEC 1000000000
+
+static epicsThreadOnceId onceId = EPICS_THREAD_ONCE_INIT;
+
+
+static struct {
+   epicsMutexId     lock;
+   epicsUInt32      priority;
+   epicsUInt32      flywheeling;
+   epicsTimeStamp   syncTime;
+} bc635TimePvt;
+
+
+
+/* Initialization */
+static void bc635Time_InitOnce(void *priority)
+{
+   bc635TimePvt.lock        = epicsMutexCreate();
+   bc635TimePvt.priority    = *(int*)priority;
+   bc635TimePvt.flywheeling = pbc635->time[1] & 0x10;
+   bc635TimePvt.syncTime.secPastEpoch = 1;
+   bc635TimePvt.syncTime.nsec = 0;
+
+   /* Finally register as a time provider */
+   generalTimeRegisterCurrentProvider("bc635", 
+                                       bc635TimePvt.priority,
+                                       bc635TimeGetCurrent);
+}  
+  
+void bc635Time_Init(int priority)
+{
+   epicsThreadOnce(&onceId, bc635Time_InitOnce, &priority);
+}
+
+
+/**********************************************************************************************************
+* 
+*  bc635TimeGetCurrent - Function to register with EPICS for reading the current time
+*
+* Read the current time registers and return the time 
+* as an epicsTimeStamp
+*
+* RETURNS:
+* OK or errors (no Bancomm or Bancomm status bit field)
+*
+*/ 
+/* pDest = Current time as an EPICS time stamp */
+static int bc635TimeGetCurrent(epicsTimeStamp *pDest)
+{
+    double cTime = 0.0;
+    int status = 0;
+
+    epicsMutexMustLock(bc635TimePvt.lock);
+
+
+    status = bc635_read(&cTime);
+    if (!(status & ~0x07))
+    {
+       pDest->secPastEpoch = (epicsUInt32)cTime - (epicsUInt32)(POSIX_TIME_AT_EPICS_EPOCH); 
+/* pDest->secPastEpoch += 12500000; */
+       pDest->nsec = (cTime - (epicsUInt32)cTime)*NSEC_PER_SEC;
+       if(!(bc635TimePvt.flywheeling = status & 0x01))
+          bc635TimePvt.syncTime = *pDest;
+    }
+#if 0
+{
+static int count;
+if(count%500 == 0) {
+   printf("cTime=%f, secPastEpoch=%d, nsec=%d\n", cTime, pDest->secPastEpoch, pDest->nsec);
+}
+count++;
+}
+#endif
+    epicsMutexUnlock(bc635TimePvt.lock);
+    if ((status & ~0x07) || bc635TimePvt.flywheeling) 
+       return epicsTimeERROR;
+    return epicsTimeOK;
+}
+
+/************************************************************************************************
+ *
+ * BCsetTpPrio -- Set the priority of the BC635 Time Provider
+ * 
+ * call this from the startup script BEFORE calling BCconfigure() if you want to set the BC635 
+ * Time Provider priority to something other than the default.
+ * Set the priority to a negative value to disable the BC635 Time Provider.
+ *
+ * RETURNS: N/A
+ */
+int bc635TimeSetTpPrio(int prio) 
+{
+   bc635TimeTpPrio = prio;
+   return 0;
+}
+
+
+
+/* Status Report */
+
+int bc635Time_Report(int level)
+{
+    if (onceId == EPICS_THREAD_ONCE_INIT) {
+        printf("BC635 Time Provider not initialized\n");
+    } 
+    else {
+       printf("BC635 Time Provider registered\n");
+       if (level) {
+          char lastSync[32];
+          epicsTimeToStrftime(lastSync, sizeof(lastSync),
+                    "%Y-%m-%d %H:%M:%S.%06f", &bc635TimePvt.syncTime);
+          printf("\tpriority = %u\n", bc635TimePvt.priority);
+          printf("\t%s\n", bc635TimePvt.flywheeling?"Flywheeling (not locked to reference)":"Locked to reference");
+          printf("Last successful sync was at %s\n", lastSync);
+       }
+    }
+    return 0;
+}
+
+/* Set up to  export the report function to the IOC shell                         */
+static const iocshArg ReportArg0 = { "interest_level", iocshArgInt};
+
+static const iocshArg * const ReportArgs[1] = { &ReportArg0 };
+static const iocshFuncDef bc635TimeReportFuncDef = {"bc635Time_Report", 1, ReportArgs};
+static void bc635TimeReportCallFunc(const iocshArgBuf *args)
+{
+    bc635Time_Report(args[0].ival);
+}
+
+
+/* Set up to  export the time provider priority set function to the IOC shell                         */
+static const iocshArg bc635TimeSetTpPrioArg0 = {"BC635 Time Provider Priority", iocshArgInt}; 
+static const iocshArg * const bc635TimeSetTpPrioArgs[1] = { &bc635TimeSetTpPrioArg0 };
+static const iocshFuncDef bc635TimeSetTpPrioFuncDef = {"bc635TimeSetTpPrio", 1, bc635TimeSetTpPrioArgs};
+static void bc635TimeSetTpPrioCallFunc(const iocshArgBuf *args)
+{
+    bc635TimeSetTpPrio(args[0].ival);
+}
+
+/* now register and export the shell functions */
+static void bc635TimeRegister(void) {
+   iocshRegister(&bc635TimeReportFuncDef, bc635TimeReportCallFunc);
+   iocshRegister(&bc635TimeSetTpPrioFuncDef, bc635TimeSetTpPrioCallFunc);
+}
+epicsExportRegistrar(bc635TimeRegister);
 
