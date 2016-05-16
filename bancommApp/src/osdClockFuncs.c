@@ -1,11 +1,9 @@
-//#include "bc635.h"
 
 #include "osdClockFuncs.h"
 
 #if defined (__rtems__)
 extern rtems_configuration_table Configuration;
 #endif
-
 
 
 void sysClockOn(void)

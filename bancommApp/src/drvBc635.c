@@ -903,14 +903,12 @@ int bcClkRateSet (int intPerSecond, int intPerTick)
         tickFrequency = intPerSecond/bcIntPerTick;
         HadPerint = FALSE;        /* Wait for interrupt flag */
         bcUseper = TRUE;        /* Set flag to use BC periodics */
-        //clock_rate_set(tickFrequency);
-        //sysClockOff();
     }
     else
     {                    /* Input value was zero - */
                     /* re-enable system clock */
 
-        //sysClockOn(); 
+        sysClockOn(); 
 
                     /* Ensure interrupt source disabled */
         pbc635->mask = pbc635->mask & 0xFD;
@@ -1169,7 +1167,7 @@ void bcSetRTC(void)
                     /* wait for approx. next second tick */
     /* (void) taskDelay((int)(fracsec * clock_rate_get()) - 1); */ 
     //epicsThreadSleep((int)(fracsec * epicsThreadSleepQuantum()) - 1);
-    epicsThreadSleep((int)(fracsec));
+    epicsThreadSleep(fracsec);
     bcSendTfp(rtctime);
 }
 
@@ -1446,7 +1444,6 @@ static int bc635TimeGetCurrent(epicsTimeStamp *pDest)
     if (!(status & ~0x07))
     {
        pDest->secPastEpoch = (epicsUInt32)cTime - (epicsUInt32)(POSIX_TIME_AT_EPICS_EPOCH); 
-/* pDest->secPastEpoch += 12500000; */
        pDest->nsec = (cTime - (epicsUInt32)cTime)*NSEC_PER_SEC;
        if(!(bc635TimePvt.flywheeling = status & 0x01))
           bc635TimePvt.syncTime = *pDest;
