@@ -1496,7 +1496,7 @@ int bc635Time_Report(int level)
                     "%Y-%m-%d %H:%M:%S.%06f", &bc635TimePvt.syncTime);
           printf("\tpriority = %u\n", bc635TimePvt.priority);
           printf("\t%s\n", bc635TimePvt.flywheeling?"Flywheeling (not locked to reference)":"Locked to reference");
-          printf("Last successful sync was at %s\n", lastSync);
+          printf("\tLast successful sync was at %s\n", lastSync);
        }
     }
     return 0;
