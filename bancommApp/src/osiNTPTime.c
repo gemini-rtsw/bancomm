@@ -11,6 +11,14 @@
  * Date:  16JUN2000
  */
 
+
+/* 2016-05-17 MDW -- Custom version copied from $EPICS_BASE/src/libCom/osi/osiNTPTime.c
+ * rTthe only difference is the addition of the function NTPTimeUpdateTickRate()
+ * which is to be used to inform the NTP time provider that the system clock tick
+ * frequency has been changed
+ */
+
+
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -284,10 +292,14 @@ int NTPTime_Report(int level)
 }
 
 
-int NTPTimeSetTickRate(void)
+/********************************************************
+ * This function added my MDW 2016-005-17 to notify
+ * NTP time provider that the system tick rate has been 
+ * updated.
+ */
+void NTPTimeUpdateTickRate(void)
 {
     NTPTimePvt.ticksPerSecond = osdTickRateGet();
     NTPTimePvt.nsecsPerTick   = NSEC_PER_SEC / NTPTimePvt.ticksPerSecond;
-    return 0;
 }
 
