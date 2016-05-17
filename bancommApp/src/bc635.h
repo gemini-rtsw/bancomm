@@ -69,5 +69,6 @@ extern long	bc635_init (void);
 extern int      bcTestCard( void );
 extern int      bcGetGpsLeap( void );
 
+extern int      NTPTimeSetTickRate();
 #endif /* !INCbc635h */
 

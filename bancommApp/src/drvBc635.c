@@ -514,12 +514,12 @@ void isr_bc635 (void *p)
             {
                 HadPerint = TRUE;    
 
-               sysClockOff(); 
+               //sysClockOff(); 
 
-               if(! (clock_rate_set(tickFrequency) == OK)) {
+               //if(! (clock_rate_set(tickFrequency) == OK)) {
 
 	       //   /*Trap something here on error, but this is an ISR... so caution.*/	       
-	       }
+	       //}
             }
 
             /* Increment interrupt count i.e., we actually got this interrupt*/
@@ -901,8 +901,10 @@ int bcClkRateSet (int intPerSecond, int intPerTick)
         pbc635->intstat = pbc635->intstat | 0x02;
                     /* Save tick frequency value */
         tickFrequency = intPerSecond/bcIntPerTick;
-        HadPerint = FALSE;        /* Wait for interrupt flag */
-        bcUseper = TRUE;        /* Set flag to use BC periodics */
+        HadPerint = FALSE;               /* Wait for interrupt flag */
+        bcUseper = TRUE;                 /* Set flag to use BC periodics */
+        sysClockOff();                   /* disable system clock */
+        clock_rate_set(tickFrequency);   /* set system tick rate */
     }
     else
     {                    /* Input value was zero - */
@@ -1202,14 +1204,15 @@ void BCconfigure
         printf("BCconfigure failed - Bancomm card not found\n");
         return;
     }
-    bc635IntEnable(2,"");                /* Enable Bancomm periodic interrupts */
-    bcClkRateSet(intPerSecond, intPerTick);        /* Set up the interrupt and tick rate */
-
 
     /* Start up the BC635 Time Provider */
     if(bc635TimeTpPrio >= 0)
        bc635Time_Init(bc635TimeTpPrio);
     bc635Time_Report(1);
+
+    bc635IntEnable(2,"");                /* Enable Bancomm periodic interrupts */
+    bcClkRateSet(intPerSecond, intPerTick);        /* Set up the interrupt and tick rate */
+
 }
 
 /**********************************************************************************************************
