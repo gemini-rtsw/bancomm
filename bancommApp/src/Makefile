@@ -2,13 +2,16 @@ TOP=../..
 include $(TOP)/configure/CONFIG
 
 LIBRARY_IOC_RTEMS += bancomm
-bancomm_LIBS        += $(EPICS_BASE_IOC_LIBS)
 
 # The -fvolatile switch doesn't work on modern versions of GCC
 # Need to declare hardware registers as 'volatile' in the code.
-#USR_CFLAGS   += -fvolatile
+USR_CFLAGS   += -O0
+USR_CFLAGS   += -std=c99 --pedantic
+
 
 DBD          += bancomm.dbd
+bancomm_DBD  += base.dbd
+bancomm_DBD  += bancommDev.dbd
 
 bancomm_SRCS += osdClockFuncs.c
 bancomm_SRCS += devBc635.c

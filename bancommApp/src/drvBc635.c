@@ -188,7 +188,10 @@ static int bcLastEpoch = 0;           /* Last year's epoch, saved when year chan
 static int bcIntPerTick = 1;          /* Number of interrupts per clock tick */
 static int bcIntCounter = 0;          /* Count all interrupts */
 static int bcTickCnt = 0;             /* Count all interrupts */
-static int altIntCounter = 0;	      /* Count alternate interrupts */
+static int altIntCounter1 = 0;	      /* Count alternate interrupts */
+static int altIntCounter2 = 0;	      /* Count alternate interrupts */
+static int bcReadCounter = 0;	      /* Count alternate interrupts */
+static int bcEventCounter = 0;	      /* Count alternate interrupts */
 
 int bcYearMonitorStarted = 0;         /* Flag indicating Year Monitor task running */
 
@@ -479,7 +482,7 @@ long bc635_ioint_info (const unsigned short signal, IOSCANPVT *ppvt)
 {
     *ppvt = ioscanpvt[signal-1];
     return OK;
-};
+}
 
 /**********************************************************************************************************
 *
@@ -544,10 +547,11 @@ void isr_bc635 (void *p)
 
             tmask = 0x01 << (intnum - 1);        /* Test value for interrupt */
  
+            altIntCounter1++;
             /* Check for interrupt bit set - request I/O scan, but only if ioscanpvt is valid */
             if ( ((bcistatus & tmask) & bcimask) != 0)
             {
-	    	altIntCounter++;
+	    	altIntCounter2++;
                 if (ioscanpvt[intnum-1] != NULL)
                     scanIoRequest(ioscanpvt[intnum-1]);
                 pbc635->intstat = pbc635->intstat | tmask;   /* Clear interrupt status bit */
@@ -735,6 +739,9 @@ int bc635_read (double *prval)
 
     *prval = 0.0;
     if (!bcConfiguredOK || bcYearEpoch == 0) return -1;        /* Forget it - no Bancomm */
+
+    bcReadCounter++;
+
     lockKey = epicsInterruptLock();            /* Disable interrupts */
     dummy = pbc635->time_req;        /* Latch time registers */
     for(i=0; i<10; i++)
@@ -766,6 +773,7 @@ int bc635_event (double *prval)
 
     if (!bcConfiguredOK || bcYearEpoch == 0) return -1;        /* Forget it - no Bancomm */
 
+    bcEventCounter++;
     /* Copy event time into etime array */
     /* memcpy(etime, &(pbc635->event[0]), 10);  */ /* memcpy() doesn't operate on  'volatile' data */ 
     for (i = 0; i<10; ++i)
@@ -798,7 +806,7 @@ int bcRegsToTime (double *prval, unsigned char *stime)
     static unsigned short prevdaynum;
 
     days = (stime[1] & 0xf)*100 + bcdtoi(stime[2]);
-    if (days == 0) days++;
+    if (days == 0) days += 200;
 
     if (days == 1 && prevdaynum > 364)    /* Check for end of year */
     {
@@ -1070,12 +1078,17 @@ int bcYearMonitor(void)
         status = NTPgetTime(&gtime);
         if (status == 0) {
             year = 1900 + gtime->tm_year;
+            printf("Setting year to %d...\n", year);
             if (year > 1993 && year < 2050) {    /* If value OK, only during epoch 1994-2049 */
                 bcYearNumber = year;        /* Set year number */
                 bcSetEpoch(year);        /* Calculate and set epoch */
             }
+            else {
+                
+            }
         }   
         else {
+            printf("NTPgetTime returning error status=%d\n", status);
             year = 0;
             epicsThreadSleep( 5); /* Problem? - wait a few seconds */
         }   
@@ -1379,9 +1392,14 @@ static void BCconfigureRegister(void) {
 
 epicsExportRegistrar(bc635_reportRegister);
 epicsExportRegistrar(BCconfigureRegister);
-epicsExportAddress(int, altIntCounter);
+epicsExportAddress(int, altIntCounter1);
+epicsExportAddress(int, altIntCounter2);
+epicsExportAddress(int, bcReadCounter);
+epicsExportAddress(int, bcEventCounter);
 epicsExportAddress(int, bcIntCounter);
 epicsExportAddress(int, bcTickCnt);
+epicsExportAddress(int, bcConfiguredOK );
+epicsExportAddress(int, bcYearEpoch);
 
 
 

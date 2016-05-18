@@ -15,6 +15,7 @@ extern "C" {
 void NTPTime_Init(int priority);
 void NTPTime_Shutdown(void *dummy);
 int  NTPTime_Report(int level);
+int NTPTimeSetTickRate(void);
 
 #ifdef __cplusplus
 }

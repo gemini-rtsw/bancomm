@@ -1,6 +1,7 @@
 
 #include <epicsInterrupt.h>
 #include "osdClockFuncs.h"
+#include "osiNTPTime.h"
 
 #if defined (__rtems__)
 extern rtems_configuration_table Configuration;
