@@ -1,5 +1,4 @@
 
-#include <epicsInterrupt.h>
 #include "osdClockFuncs.h"
 
 #if defined (__rtems__)
@@ -8,8 +7,6 @@ extern rtems_interval rtemsTicksPerSecond;
 extern double rtemsTicksPerSecond_double;
 extern double rtemsTicksPerTwoSeconds_double;
 #endif
-
-
 
 void sysClockOn(void)
 {
@@ -33,7 +30,6 @@ void clock_tick(void)
 #endif
 }
 
-
 int clock_rate_get(void) 
 {
 #if defined (__rtems__)
@@ -47,8 +43,6 @@ return -1;
 
 int clock_rate_set(int  rate)
 {
-//   int key;
-//   key = epicsInterruptLock();
 
 #if defined (__rtems__)
    Configuration.microseconds_per_tick =  1000000 / rate;
@@ -57,7 +51,5 @@ int clock_rate_set(int  rate)
    rtemsTicksPerTwoSeconds_double = rtemsTicksPerSecond_double * 2.0;
 #endif
 
-   NTPTimeUpdateTickRate();            /* inform NTP time provider of updated tick rate */
-//   epicsInterruptUnlock(key);
    return 0;
 }

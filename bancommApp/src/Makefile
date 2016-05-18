@@ -9,11 +9,12 @@ bancomm_LIBS        += $(EPICS_BASE_IOC_LIBS)
 #USR_CFLAGS   += -fvolatile
 
 DBD          += bancomm.dbd
+bancomm_DBD  += base.dbd
+bancomm_DBD  += bancommDev.dbd
 
 bancomm_SRCS += osdClockFuncs.c
 bancomm_SRCS += devBc635.c
 bancomm_SRCS += drvBc635.c
-bancomm_SRCS += osiNTPTime.c
 
 INC          += bc635.h
 INC          += osdClockFuncs.h
