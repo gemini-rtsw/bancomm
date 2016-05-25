@@ -2,7 +2,7 @@ TOP=../..
 include $(TOP)/configure/CONFIG
 
 LIBRARY_IOC_RTEMS += bancomm
-bancomm_LIBS        += $(EPICS_BASE_IOC_LIBS)
+#bancomm_LIBS        += $(EPICS_BASE_IOC_LIBS)
 
 # The -fvolatile switch doesn't work on modern versions of GCC
 # Need to declare hardware registers as 'volatile' in the code.
