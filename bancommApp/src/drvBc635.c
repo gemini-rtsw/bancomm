@@ -588,7 +588,7 @@ void bc635_set_strobe (const double stime)
     secs = itime - ((hours * 3600) + (mins * 60));
     hsec = fracsec * 100;
     tthsec = (fracsec * 10000) - (hsec * 100); 
-    printf ("Time interrupt set for %02d:%02d:%02d.%02d%02d\n",hours,mins,secs, hsec, tthsec);
+    /*printf ("Time interrupt set for %02d:%02d:%02d.%02d%02d\n",hours,mins,secs, hsec, tthsec);*/
 
 
     /* Set the STROBE registers with 16 bit writes (same offsets as corresponding EVENT registers) */
