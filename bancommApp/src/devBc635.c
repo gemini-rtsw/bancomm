@@ -17,6 +17,21 @@
 */
 
 
+
+
+/* These device support routines use VME_IO "#Cx Sy" where Cx is card number and Sy is signal number.
+ * For signal 1, the time is read from the event time registers, which is only valid if the external
+ * event interrupt is enabled and the interrupt has occurred.
+ * For all other signals, the time is read from the current time registers.
+ * If the record's SCAN field is set to 'I/O intr", then the record is processed according to it's signal"
+ * Signal 1: When an external event interrupt has occured
+ * Signal 2: When the periodic pulse output interrupt has occurred. 
+ * Signal 3: When the Time-Of-Day coincidence interrupt has occurred. 
+ * Signal 4: When the One Pulse Per second output interrupt has occurred.
+ * Signal 5: When the output FIFO Data Packet Is Ready interrupt has occurred
+ */
+ 
+
 #include <epicsStdio.h>
 #include <epicsTime.h>
 

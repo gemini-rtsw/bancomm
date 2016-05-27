@@ -136,21 +136,22 @@
 
 /*bc635 memory structure*/
 typedef struct {
-    unsigned short dev_id;      /* VXIbus ID Register */
-    unsigned short dev_type;    /* VXIbus Device type */
-    unsigned short dev_csr;     /* VXIbus Status/Control */
-    unsigned char res1[4];      /* Reserved */
-    unsigned short time_req;    /* Time Latch */
-    unsigned char time[10];     /* Requested Time */
-    unsigned short event[5];    /* Event/Strobe Time */
-    unsigned short unlock;      /* Release Lockout/Capture time */
-    unsigned short ack;         /* Acknowledge */
-    unsigned short cmd;         /* Command */
-    unsigned short fifo;        /* FIFO In/out */
-    unsigned short mask;        /* Interrupt masks */
-    unsigned short intstat;     /* Interrupt status */
-    unsigned short vector;      /* Interrupt vector */
-    unsigned short level;       /* Interrupt level */
+    epicsUInt16 dev_id;      /* VXIbus ID Register */
+    epicsUInt16 dev_type;    /* VXIbus Device type */
+    epicsUInt16 dev_csr;     /* VXIbus  Control & Status Register */
+    epicsUInt16 res1[2];     /* Reserved */
+    epicsUInt16 time_req;    /* Time Latch */
+    epicsUInt8  time[10];    /* Requested Time */
+    epicsUInt16 event[5];    /* Event/Strobe Time */
+    epicsUInt16 unlock;      /* Release Lockout/Capture time */
+    epicsUInt16 ack;         /* Acknowledge */
+    epicsUInt16 cmd;         /* Command */
+    epicsUInt16 fifo;        /* FIFO In/out */
+    epicsUInt16 mask;        /* Interrupt masks */
+    epicsUInt16 intstat;     /* Interrupt status */
+    epicsUInt16 vector;      /* Interrupt vector */
+    epicsUInt16 level;       /* Interrupt level */
+    epicsUInt16 res2[8];     /* Reserved */
 } volatile bc635Regs_t;
 
 //static long report();
@@ -475,7 +476,7 @@ static int bcdtoi (unsigned char digits)    /* BCD digits to be converted to int
 *
 * NOMANUAL
 */
-long bc635_ioint_info (const unsigned short signal, IOSCANPVT *ppvt)
+long bc635_ioint_info (const epicsUInt16 signal, IOSCANPVT *ppvt)
 {
     *ppvt = ioscanpvt[signal-1];
     return OK;
@@ -500,7 +501,7 @@ long bc635_ioint_info (const unsigned short signal, IOSCANPVT *ppvt)
 void isr_bc635 (void *p)
 {
     register short intnum;
-    register unsigned short tmask, bcistatus, bcimask;
+    register epicsUInt16 tmask, bcistatus, bcimask;
 
     bcistatus = pbc635->intstat;            /* Save copy of status register */
     bcimask   = pbc635->mask;            /* Save copy of interrupt mask */
@@ -589,11 +590,13 @@ void bc635_set_strobe (const double stime)
     tthsec = (fracsec * 10000) - (hsec * 100); 
     printf ("Time interrupt set for %02d:%02d:%02d.%02d%02d\n",hours,mins,secs, hsec, tthsec);
 
+
     /* Set the STROBE registers with 16 bit writes (same offsets as corresponding EVENT registers) */
-    pbc635->event[1] = (unsigned short) itobcd(hours);
-    pbc635->event[2] = (unsigned short) (itobcd(mins)<<8) + itobcd(secs);
-    pbc635->event[3] = (unsigned short) (itobcd(hsec)<<8) + itobcd(tthsec);
-    pbc635->cmd |= BC635CMD_STREN;        /* Enable 'major time mode' coincidence strobe */
+    pbc635->event[1] = (epicsUInt16) itobcd(hours);
+    pbc635->event[2] = (epicsUInt16) (itobcd(mins)<<8) + itobcd(secs);
+    pbc635->event[3] = (epicsUInt16) (itobcd(hsec)<<8) + itobcd(tthsec);
+    pbc635->cmd |= (BC635CMD_STREN );   /* Enable 'major time mode' coincidence strobe */
+
 }
 
 /**********************************************************************************************************
@@ -645,11 +648,11 @@ void bc635SetPeriod (const int hzval, const int intpertick, char *tfpstring)
 */
 /*  signal = Interrupt source to be enabled */
 /*  parm = additional interrupt data */
-int bc635IntEnable (const unsigned short signal, const char *parm )
+int bc635IntEnable (const epicsUInt16 signal, const char *parm )
 {
     static int init = FALSE;
     int status;
-    unsigned short intnum, imask, dummy;    /* Interrupt number and mask */
+    epicsUInt16 intnum, imask, dummy;    /* Interrupt number and mask */
 
     if( !init )
     {
@@ -728,7 +731,7 @@ int bc635IntEnable (const unsigned short signal, const char *parm )
 /* prval = Current time as a double precision real number */
 int bc635_read (double *prval)
 {
-    unsigned short       dummy;
+    epicsUInt16       dummy;
     static unsigned char stime[10];
     register int         lockKey;
     int                  i;
@@ -737,8 +740,9 @@ int bc635_read (double *prval)
     if (!bcConfiguredOK || bcYearEpoch == 0) return -1;        /* Forget it - no Bancomm */
     lockKey = epicsInterruptLock();            /* Disable interrupts */
     dummy = pbc635->time_req;        /* Latch time registers */
-    for(i=0; i<10; i++)
+    for(i=0; i<10; i++) {
         stime[i] = pbc635->time[i];
+    }
     epicsInterruptUnlock(lockKey);            /* Re-enable interrupts */
     
     return bcRegsToTime(prval, stime);    /* Finish off */
@@ -760,7 +764,7 @@ int bc635_read (double *prval)
 int bc635_event (double *prval)
 {
 
-    unsigned short dummy;
+    epicsUInt16 dummy;
     static unsigned char etime[10];
     int i;
 
@@ -768,9 +772,9 @@ int bc635_event (double *prval)
 
     /* Copy event time into etime array */
     /* memcpy(etime, &(pbc635->event[0]), 10);  */ /* memcpy() doesn't operate on  'volatile' data */ 
-    for (i = 0; i<10; ++i)
+    for (i = 0; i<10; ++i) {
         etime[i] = pbc635->event[i];
-
+    }
 
     dummy = pbc635->unlock;            /* Release lockout */
     return bcRegsToTime(prval, etime);    /* Finish off */
@@ -792,10 +796,11 @@ int bc635_event (double *prval)
 /* stime = register contents */
 int bcRegsToTime (double *prval, unsigned char *stime)
 {
-    register unsigned short days, hours, minutes, seconds;
+    register epicsUInt16 days, hours, minutes, seconds;
     register unsigned long useconds;
     register int status = OK;
-    static unsigned short prevdaynum;
+    static epicsUInt16 prevdaynum;
+
 
     days = (stime[1] & 0xf)*100 + bcdtoi(stime[2]);
     if (days == 0) days++;
@@ -817,7 +822,6 @@ int bcRegsToTime (double *prval, unsigned char *stime)
            + minutes*60.0 
            + seconds*1.0 
            + ((double)useconds)/1000000;
-
     if (prevdaynum == 1 && days > 364)
         *prval += bcLastEpoch;        /* Event occurred last year! */
     else
@@ -939,7 +943,7 @@ int bcClkRateSet (int intPerSecond, int intPerTick)
 *
 * NOMANUAL
 */
-int bc635_write (const unsigned short signal, const double value)
+int bc635_write (const epicsUInt16 signal, const double value)
 {
     if (signal == 3)
     {
