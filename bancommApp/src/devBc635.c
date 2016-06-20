@@ -308,8 +308,8 @@ static long read_ai (
     else
         status = bc635_read (&value);
 
-    printf("read_ai: status=%ld, value=%f\n", status, value);
     /*
+    printf("read_ai: status=%ld, value=%f\n", status, value);
      * Check for failures. 
      * status = -1: Nonsense time - invalid alarm.
      * status = 1:  Lost frequency source - major alarm.
