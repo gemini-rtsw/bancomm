@@ -16,7 +16,6 @@ bancomm_DBD  += bancommDev.dbd
 bancomm_SRCS += osdClockFuncs.c
 bancomm_SRCS += devBc635.c
 bancomm_SRCS += drvBc635.c
-bancomm_SRCS += osiNTPTime.c
 
 INC          += bc635.h
 INC          += osdClockFuncs.h
