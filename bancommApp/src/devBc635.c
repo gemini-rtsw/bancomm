@@ -13,8 +13,24 @@
 * 03, 26Mar99,ajf  read_ai was not returning a value if status equalled OK.
 *
 * 2016/03/07 mdw   Removed vxWorks #includes. Code is now EPICS OSI compliant.
+* 2016/05/25 mdw   read_si now returns val if alarm is only MINOR.
 */
 
+
+
+
+/* These device support routines use VME_IO "#Cx Sy" where Cx is card number and Sy is signal number.
+ * For signal 1, the time is read from the event time registers, which is only valid if the external
+ * event interrupt is enabled and the interrupt has occurred.
+ * For all other signals, the time is read from the current time registers.
+ * If the record's SCAN field is set to 'I/O intr", then the record is processed according to it's signal"
+ * Signal 1: When an external event interrupt has occured
+ * Signal 2: When the periodic pulse output interrupt has occurred. 
+ * Signal 3: When the Time-Of-Day coincidence interrupt has occurred. 
+ * Signal 4: When the One Pulse Per second output interrupt has occurred.
+ * Signal 5: When the output FIFO Data Packet Is Ready interrupt has occurred
+ */
+ 
 
 #include <epicsStdio.h>
 #include <epicsTime.h>
@@ -351,19 +367,17 @@ static long read_si (
         status = bc635_event (&value);
     else
         status = bc635_read (&value);
- 
-    /*
-     * Check for failures. status > 1 is not synced etc, minor error;
-     * -1 is nonsense time, major error.
-     */
-    if (status == ERROR)
+
+    /*  Check for failures */
+    if (status == ERROR) /* Bancomm registers have invalid time values */
 	recGblSetSevr (psi, READ_ALARM, INVALID_ALARM);
-    else if (status & 0x01)
+    else if (status & 0x01) /* Bancomm not synched to time reference */
 	recGblSetSevr (psi, READ_ALARM, MAJOR_ALARM);
-    else if (status != OK)
-	recGblSetSevr (psi, READ_ALARM, MINOR_ALARM);
     else
     {
+        if (status & 0x06 )  /* Bancomm time or frequency offset too large */
+	   recGblSetSevr (psi, READ_ALARM, MINOR_ALARM);
+
 	ival = (time_t) value;
 	ptm = gmtime (&ival);
 	ptm->tm_year += (ptm->tm_year >= 70) ? 1900 : 2000;
