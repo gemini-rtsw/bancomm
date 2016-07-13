@@ -1380,7 +1380,7 @@ static const iocshArg    *BCconfigureArgs[] = {
 	&BCconfigureArg4,
 };
 
-static const iocshFuncDef BCconfigureFuncDef = {"BCconfigure", 6, BCconfigureArgs};
+static const iocshFuncDef BCconfigureFuncDef = {"BCconfigure", 5, BCconfigureArgs};
 
 /* Wrapper called by iocsh, selects the argument types that bc635_report needs */
 static void BCconfigureCallFunc(const iocshArgBuf *args) {

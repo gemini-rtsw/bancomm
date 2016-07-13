@@ -1,5 +1,6 @@
 registrar( bc635_reportRegister )
 registrar( BCconfigureRegister )
+registrar( bc635TimeRegister )
 variable( altIntCounter1, int )
 variable( altIntCounter2, int )
 variable( bcEventCounter, int )
