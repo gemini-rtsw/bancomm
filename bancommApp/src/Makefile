@@ -5,7 +5,7 @@ LIBRARY_IOC_RTEMS += bancomm
 
 # The -fvolatile switch doesn't work on modern versions of GCC
 # Need to declare hardware registers as 'volatile' in the code.
-USR_CFLAGS   += -O0
+#USR_CFLAGS   += -O0
 #USR_CFLAGS   += -std=c99 --pedantic
 
 
