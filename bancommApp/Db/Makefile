@@ -12,7 +12,8 @@ vpath %.db $(SYS_DB_PATHS)
 # Create and install (or just install) into <top>/db
 # databases, templates, substitutions like this
 #TDCT_CFG = ../tdct.cfg
-DEPSCHS = $(wildcard ../*.sch)
+#DEPSCHS = $(wildcard ../*.sch)
+#DB_OPT = YES
 DB += bctest.db
 
 include $(TOP)/configure/RULES
