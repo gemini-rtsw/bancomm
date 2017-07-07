@@ -1,0 +1,8 @@
+*.bak
+O.*
+db
+dbd
+bin
+data
+include
+lib
