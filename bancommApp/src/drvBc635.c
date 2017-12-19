@@ -1138,8 +1138,15 @@ static int bcStartYearMonitor(void)
         /* Don't rush it - wait a few seconds */
         epicsThreadSleep(1);
 
+        /* 
+         * 20171212 Bancomm priority adjustment for bcYearMonitor task. 
+         * mrippa move from priority 100 which is highest, actually 99 is highest
+         * to lowest 1.
+         *
+         * 
+         * */
         if( (epicsThreadCreate("bcYearMonitor", 
-                                100, 
+                                epicsThreadPriorityLow, 
                                 epicsThreadGetStackSize(epicsThreadStackMedium), 
                                 (EPICSTHREADFUNC)bcYearMonitor, NULL) ) )
         {
