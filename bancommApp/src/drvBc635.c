@@ -998,32 +998,40 @@ long bc635_report (int level)
 
 /**********************************************************************************************************
 * 
-* NTPgetTime - get time from NTP server
+* NTPgetTime - 
 *
-* Returns the current time in a *(struct tm) result,  by interrogating
-* the NTP server. This is done using the TSdrv function TSgetUnixTime 
+* This mis-named routine gets the current time from the highest priority
+* time provider that isn't the Bancomm time provider itself.
+* Returns the current time in a *(struct tm) result,
+* This is used by the bcYearMonitor thread to determine if the
+* year has changed.
 *
-*  RETURNS: Error if fail to get NTP time
+*  RETURNS: epicsTimeERROR if fail to get valid time
 *
 *  NOMANUAL
 */
-int NTPgetTime (struct tm **gtime) 
+
+//int NTPgetTime (struct tm **gtime) 
+int NTPgetTime (struct tm *pGtime) 
 {
     epicsTimeStamp ets;
-    struct timespec sp;
+//    struct timespec sp;
     time_t utime;
+    int tpPrio;
+    unsigned long nSecDummy = 0;
 
     /* note: this doesn't necessarily get the time from an NTP server.... */
-    if (epicsTimeGetCurrent(&ets) != epicsTimeOK)
-        return -1;            /* If error, return year as -1 */
+    //if (epicsTimeGetCurrent(&ets) != epicsTimeOK)
+    /* get the time, but not from the Bancomm provider! */
+    generalTimeGetExceptPriority(&ets, &tpPrio, bc635TimeTpPrio);
+        return epicsTimeERROR;            /* If error, return year as -1 */
                     /* NTP epoch is 1900 */
-    epicsTimeToTimespec(&sp, &ets); /* Convert EPICS timestamp to POSIX struct timespec */
-
-    utime = sp.tv_sec;
-
-    *gtime = gmtime(&utime);        /* Convert to broken down time */
+    //epicsTimeToTimespec(&sp, &ets); /* Convert EPICS timestamp to POSIX struct timespec */
+    //utime = sp.tv_sec;
+    //*gtime = gmtime(&utime);        /* Convert to broken down time */
+    epicsTimeToTM(pGtime, &nSecDummy, &ets);
                     /* in struct tm */
-    return 0;
+    return epicsTimeOK;
 }
 
 /**********************************************************************************************************
@@ -1071,11 +1079,14 @@ int bcSetEpoch(const int year)
 */
 int bcYearMonitor(void)
 {
-    int status,year;
-    int first_try_count = 0;
-    struct tm *gtime;
+    //int status,year;
+    int year;
+    // int first_try_count = 0;
+    //struct tm *gtime;
+    struct tm gtime;
     
-    
+   
+#if 0       /* no need to do this! */ 
     do {
         first_try_count++;
         if (first_try_count >25 ) return ERROR;        /* Give up eventually */
@@ -1100,10 +1111,10 @@ int bcYearMonitor(void)
     /*
       epicsThreadSleep(clock_rate_get() * 60 * (30 - gtime->tm_min));
      */
+#endif
 
     while (1) {                /* Now loop forever */
-        status = NTPgetTime(&gtime);
-        if (status == 0) {
+        if(NTPgetTime(&gtime) == epicsTimeOK) {
             year = 1900 + gtime->tm_year;    /* add 1900 to get year number */
             if (year > 1993 && year < 2050) {    /* If value OK, only during epoch 1994-2049 */
                if(bcYearNumber != year) {
@@ -1111,9 +1122,12 @@ int bcYearMonitor(void)
                   bcSetEpoch(year);           /* Calculate and set epoch */
                }
             }
+            epicsThreadSleep(YEAR_MONITOR_SLEEP);   /* Now wait specified number of seconds (1 hour) */
         }
-         epicsThreadSleep(YEAR_MONITOR_SLEEP);   /* Now wait specified number of seconds (1 hour) */
-         /* epicsThreadSleep(60.0);  */
+        else {
+           errlogMessage("bcYearMonitor can't get current time");
+           epicsThreadSleep(15.0); /* try again in 15 seconds */
+        }
     }
 }
 
@@ -1145,7 +1159,7 @@ static int bcStartYearMonitor(void)
          *
          * 
          * */
-        if( (epicsThreadCreate("bcYearMonitor", 
+        if(!(epicsThreadCreate("bcYearMonitor", 
                                 epicsThreadPriorityLow, 
                                 epicsThreadGetStackSize(epicsThreadStackMedium), 
                                 (EPICSTHREADFUNC)bcYearMonitor, NULL) ) )
@@ -1174,23 +1188,22 @@ void bcSetRTC(void)
     struct timespec sp;
     double fracsec;
     time_t utime;
+    int tpPrio;
 
-    //epicsTimeGetCurrent(&ets);
-    generalTimeGetExceptPriority(&ets, &bc635TimeTpPrio, 1); /* don't get current time from Bancomm board! */
+    generalTimeGetExceptPriority(&ets, &tpPrio, bc635TimeTpPrio); /* don't get current time from Bancomm board! */
     epicsTimeToTimespec(&sp, &ets); /* Convert EPICS timestamp to POSIX struct timespec */
     fracsec = 1.0 - (sp.tv_nsec/1000000000.0);
                     /* NTP epoch is 1900 */
     utime = sp.tv_sec - TS_1900_TO_UNIX_EPOCH;
-//printf("ntp secs: %d; unix secs: %d\n", sp.tv_sec,utime);
     gtime = gmtime(&utime);        /* Convert to broken down time */
                     /* in struct tm */
     sprintf(rtctime,"L%02d%02d%02d%02d%02d%02d",
     (gtime->tm_year)%100,gtime->tm_mon+1, gtime->tm_mday,
     gtime->tm_hour, gtime->tm_min, gtime->tm_sec + 1); 
-    printf("TFP packet for RTC = %s\n",rtctime);
-                    /* wait for approx. next second tick */
-    /* (void) taskDelay((int)(fracsec * clock_rate_get()) - 1); */ 
-    //epicsThreadSleep((int)(fracsec * epicsThreadSleepQuantum()) - 1);
+    epicsPintf("bcSetRTC(): TFP packet for RTC = %s\n",rtctime);
+    epicsPrintf("bcSetRTC(): synced with time provider with priority %d\n", tpPrio);
+`
+    /* wait for approx. next second tick */
     epicsThreadSleep(fracsec);
     bcSendTfp(rtctime);
 }
