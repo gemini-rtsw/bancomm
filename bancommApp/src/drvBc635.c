@@ -1016,7 +1016,7 @@ int NTPgetTime (struct tm *pGtime)
 {
     epicsTimeStamp ets;
 //    struct timespec sp;
-    time_t utime;
+//    time_t utime;
     int tpPrio;
     unsigned long nSecDummy = 0;
 
@@ -1115,7 +1115,8 @@ int bcYearMonitor(void)
 
     while (1) {                /* Now loop forever */
         if(NTPgetTime(&gtime) == epicsTimeOK) {
-            year = 1900 + gtime->tm_year;    /* add 1900 to get year number */
+            //year = 1900 + gtime->tm_year;    /* add 1900 to get year number */
+            year = 1900 + gtime.tm_year;    /* add 1900 to get year number */
             if (year > 1993 && year < 2050) {    /* If value OK, only during epoch 1994-2049 */
                if(bcYearNumber != year) {
                   bcYearNumber = year;        /* Set year number */
@@ -1198,11 +1199,11 @@ void bcSetRTC(void)
     gtime = gmtime(&utime);        /* Convert to broken down time */
                     /* in struct tm */
     sprintf(rtctime,"L%02d%02d%02d%02d%02d%02d",
-    (gtime->tm_year)%100,gtime->tm_mon+1, gtime->tm_mday,
-    gtime->tm_hour, gtime->tm_min, gtime->tm_sec + 1); 
-    epicsPintf("bcSetRTC(): TFP packet for RTC = %s\n",rtctime);
+        (gtime->tm_year)%100,gtime->tm_mon+1, gtime->tm_mday,
+         gtime->tm_hour, gtime->tm_min, gtime->tm_sec + 1); 
+    epicsPrintf("bcSetRTC(): TFP packet for RTC = %s\n",rtctime);
     epicsPrintf("bcSetRTC(): synced with time provider with priority %d\n", tpPrio);
-`
+
     /* wait for approx. next second tick */
     epicsThreadSleep(fracsec);
     bcSendTfp(rtctime);
