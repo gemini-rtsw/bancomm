@@ -1017,13 +1017,11 @@ int NTPgetTime (struct tm *pGtime)
     epicsTimeStamp ets;
 //    struct timespec sp;
 //    time_t utime;
-    int tpPrio;
     unsigned long nSecDummy = 0;
 
     /* note: this doesn't necessarily get the time from an NTP server.... */
-    //if (epicsTimeGetCurrent(&ets) != epicsTimeOK)
     /* get the time, but not from the Bancomm provider! */
-    generalTimeGetExceptPriority(&ets, &tpPrio, bc635TimeTpPrio);
+    if (generalTimeGetExceptPriority(&ets, NULL, bc635TimeTpPrio) != epicsTimeOK)
         return epicsTimeERROR;            /* If error, return year as -1 */
                     /* NTP epoch is 1900 */
     //epicsTimeToTimespec(&sp, &ets); /* Convert EPICS timestamp to POSIX struct timespec */
