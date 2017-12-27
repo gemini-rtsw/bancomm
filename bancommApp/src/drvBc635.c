@@ -154,8 +154,6 @@ typedef struct {
     epicsUInt16 res2[8];     /* Reserved */
 } volatile bc635Regs_t;
 
-//static long report();
-//static long init();
 void bc635Time_Init(int);
 int bc635Time_Report(int);
 static int bc635TimeGetCurrent(epicsTimeStamp *);
@@ -1011,24 +1009,17 @@ long bc635_report (int level)
 *  NOMANUAL
 */
 
-//int NTPgetTime (struct tm **gtime) 
 int NTPgetTime (struct tm *pGtime) 
 {
     epicsTimeStamp ets;
-//    struct timespec sp;
-//    time_t utime;
     unsigned long nSecDummy = 0;
 
     /* note: this doesn't necessarily get the time from an NTP server.... */
     /* get the time, but not from the Bancomm provider! */
     if (generalTimeGetExceptPriority(&ets, NULL, bc635TimeTpPrio) != epicsTimeOK)
         return epicsTimeERROR;            /* If error, return year as -1 */
-                    /* NTP epoch is 1900 */
-    //epicsTimeToTimespec(&sp, &ets); /* Convert EPICS timestamp to POSIX struct timespec */
-    //utime = sp.tv_sec;
-    //*gtime = gmtime(&utime);        /* Convert to broken down time */
-    epicsTimeToTM(pGtime, &nSecDummy, &ets);
-                    /* in struct tm */
+
+    epicsTimeToTM(pGtime, &nSecDummy, &ets);  /* convert epicsTimeStamp to struct tm */
     return epicsTimeOK;
 }
 
@@ -1077,55 +1068,30 @@ int bcSetEpoch(const int year)
 */
 int bcYearMonitor(void)
 {
-    //int status,year;
-    int year;
-    // int first_try_count = 0;
-    //struct tm *gtime;
-    struct tm gtime;
+    static int        year;
+    static struct tm gtime;
+    static int       retry;
     
    
-#if 0       /* no need to do this! */ 
-    do {
-        first_try_count++;
-        if (first_try_count >25 ) return ERROR;        /* Give up eventually */
-        status = NTPgetTime(&gtime);
-        if (status == 0) {
-            year = 1900 + gtime->tm_year;
-            printf("Setting year to %d...\n", year);
-            if (year > 1993 && year < 2050) {    /* If value OK, only during epoch 1994-2049 */
-                bcYearNumber = year;        /* Set year number */
-                bcSetEpoch(year);        /* Calculate and set epoch */
-                
-            }
-        }   
-        else {
-            printf("NTPgetTime returning error status=%d\n", status);
-            year = 0;
-            epicsThreadSleep( 5); /* Problem? - wait a few seconds */
-        }   
-    } while ((status != 0) || year < 1994 || year > 2049);
-
-    /* Wait for xx:30 */
-    /*
-      epicsThreadSleep(clock_rate_get() * 60 * (30 - gtime->tm_min));
-     */
-#endif
-
-    while (1) {                /* Now loop forever */
+    while (1) {                /* loop forever */
         if(NTPgetTime(&gtime) == epicsTimeOK) {
-            //year = 1900 + gtime->tm_year;    /* add 1900 to get year number */
-            year = 1900 + gtime.tm_year;    /* add 1900 to get year number */
-            if (year > 1993 && year < 2050) {    /* If value OK, only during epoch 1994-2049 */
+            retry = 0;                        /* reset retry counter         */
+            year = 1900 + gtime.tm_year;      /* add 1900 to get year number */
+            if (year > 1993 && year < 2050) { /* If value OK, only during epoch 1994-2049 */
                if(bcYearNumber != year) {
                   bcYearNumber = year;        /* Set year number */
                   bcSetEpoch(year);           /* Calculate and set epoch */
                }
             }
-            epicsThreadSleep(YEAR_MONITOR_SLEEP);   /* Now wait specified number of seconds (1 hour) */
+            epicsThreadSleep(YEAR_MONITOR_SLEEP);   /* Check again in an hour */
         }
         else {
-           errlogMessage("bcYearMonitor can't get current time");
-           epicsThreadSleep(15.0); /* try again in 15 seconds */
+           retry++;      /* increment retry counter */
+           if (retry >= 25) {
+              errlogMessage("bcYearMonitor can't get current time");
+              epicsThreadSleep(YEAR_MONITOR_SLEEP);   /* a longer term outage -- try again in an hour */
+           }
+           epicsThreadSleep(5.0); /* maybe there is a momentary outage -- try again in 5 seconds */
         }
     }
 }
