@@ -94,6 +94,7 @@
 #include <epicsMutex.h>
 #include <epicsExport.h>
 #include <generalTimeSup.h>
+#include <initHooks.h>
 #include <iocsh.h>
 #include <taskwd.h>
 #include <devLib.h>
@@ -156,12 +157,11 @@ typedef struct {
 
 //static long report();
 //static long init();
-void bc635Time_Init(int);
 int bc635Time_Report(int);
 static int bc635TimeGetCurrent(epicsTimeStamp *);
 int bc635TimeSetTpPrio(int); 
-
-static int bcStartYearMonitor();
+void bcStartYearMonitor(initHookState state);
+void bc635Time_Init(initHookState state);
 
 struct {
         long    number;
@@ -175,9 +175,6 @@ epicsExportAddress(drvet, drvBc635);
 
 static bc635Regs_t  *pbc635 = NULL;   /* Pointer to bc635 register structure */
 static IOSCANPVT ioscanpvt[4];        /* I/O scan list pointers */
-static int bcThisIsMaster = 0;        /* Flag, id master = TRUE; default is FALSE/slave */
-static int bcNoLeapSecs = 0;          /* FLAG : TRUE => DON'T use GPS leap secs */
-static int bcOffset = 0;              /* Offset relative to input reference in microsecs */
 static int HadPerint;                 /* Flag = TRUE when first periodic interrupt received */
 static int sysClkRateWas;             /* Saved value of system clock */
 static int tickFrequency;             /* System clock tick frequency */
@@ -197,6 +194,20 @@ static int bcEventCounter = 0;	      /* Count alternate interrupts */
 int bcYearMonitorStarted = 0;         /* Flag indicating Year Monitor task running */
 
 static int bc635TimeTpPrio = 20;    /* Time provider priority, default=20, negative to disable bc635 time provider */
+static epicsThreadOnceId onceId = EPICS_THREAD_ONCE_INIT;
+
+static struct {
+   epicsMutexId     lock;
+   epicsUInt32      priority;
+   epicsUInt32      flywheeling;
+   epicsTimeStamp   syncTime;
+   epicsUInt32      ips;                       /* Interrupts per second */
+   epicsUInt32      ipt;                       /* Interrupts per tick   */
+   epicsUInt32      bcThisIsMaster;        /* Flag, id master = TRUE; default is FALSE/slave */
+   epicsUInt32      bcNoLeapSecs;          /* FLAG : TRUE => DON'T use GPS leap secs */
+   epicsUInt32      bcOffset;              /* Offset relative to input reference in microsecs */
+} bc635TimePvt;
+
 
 /* Declare pointer to user definable function called on each interrupt */
 void (*bcUsrClock)(const int icount) = NULL;
@@ -400,7 +411,7 @@ long bc635_init()
      * If so, set to GPS mode. The value of the GPS leap seconds
      * should be zero for a bc635 (slave) and positive for a bc637 (master)
      */
-    if (bcThisIsMaster)
+    if (bc635TimePvt.bcThisIsMaster)
     {
         bcSendTfp("A6");        /* Master - set mode to GPS */
         if ((bcGetGpsLeap()) == 0)    /* Strange if zero returned? */
@@ -416,7 +427,7 @@ long bc635_init()
         if ((bcGetGpsLeap()) < 0)
             printf("bcGetGpsLeap Timed out - no Leap Seconds returned\n");
     }
-    if (!bcNoLeapSecs)
+    if (!bc635TimePvt.bcNoLeapSecs)
         bcSendTfp("P00");        /* Set mode for TFP processor */
                     /*  use GPS leap secs */
     else
@@ -424,12 +435,13 @@ long bc635_init()
                     /* don't use GPS leap secs */
 
                     /* Set string for offset control */
-    sprintf(str_offset,"G%+08d",bcOffset*10);
+    sprintf(str_offset,"G%+08d",bc635TimePvt.bcOffset*10);
     bcSendTfp(str_offset);        /* Send packet G for offset control */
     bcSendTfp("M+00");            /* Time offset zero - */
                     /* display UTC unmodified */
 
-     bcStartYearMonitor();  /* Start the year monitoring task */
+    /*Register for init*/
+     initHookRegister(bcStartYearMonitor);
 
     return OK;
 } 
@@ -1014,8 +1026,11 @@ int NTPgetTime (struct tm **gtime)
     time_t utime;
 
     /* note: this doesn't necessarily get the time from an NTP server.... */
-    if (epicsTimeGetCurrent(&ets) != epicsTimeOK)
+    if (epicsTimeGetCurrent(&ets) != epicsTimeOK) {
+        
         return -1;            /* If error, return year as -1 */
+
+    }
                     /* NTP epoch is 1900 */
     epicsTimeToTimespec(&sp, &ets); /* Convert EPICS timestamp to POSIX struct timespec */
 
@@ -1117,6 +1132,25 @@ int bcYearMonitor(void)
     }
 }
 
+static epicsThreadOnceId bcYearOnceId = EPICS_THREAD_ONCE_INIT;
+
+/************************************************************
+* 
+* bcStartYearMonitorOnce - Start year monitor task
+*/
+void bcStartYearMonitorOnce() {
+
+    if( (epicsThreadCreate("bcYearMonitor", 
+                    epicsThreadPriorityLow, 
+                    epicsThreadGetStackSize(epicsThreadStackMedium), 
+                    (EPICSTHREADFUNC)bcYearMonitor, NULL) ) )
+    {
+        bcYearMonitorStarted = 0;
+        return ;
+    }
+    bcYearMonitorStarted = 1;
+    return ;
+}
 
 /**********************************************************************************************************
 * 
@@ -1128,33 +1162,15 @@ int bcYearMonitor(void)
 *
 * NOMANUAL
 */
-static int bcStartYearMonitor(void)
+void bcStartYearMonitor(initHookState state)
 {
 
-    if (!bcYearMonitorStarted)
-    {
-        bcYearMonitorStarted = 1;
+    if (state == initHookAtEnd) {
 
-        /* Don't rush it - wait a few seconds */
-        epicsThreadSleep(1);
-
-        /* 
-         * 20171212 Bancomm priority adjustment for bcYearMonitor task. 
-         * mrippa move from priority 100 which is highest, actually 99 is highest
-         * to lowest 1.
-         *
-         * 
-         * */
-        if( (epicsThreadCreate("bcYearMonitor", 
-                                epicsThreadPriorityLow, 
-                                epicsThreadGetStackSize(epicsThreadStackMedium), 
-                                (EPICSTHREADFUNC)bcYearMonitor, NULL) ) )
-        {
-            bcYearMonitorStarted = 0;
-            return ERROR;
-        }
+        printf("Starting Bancomm Year monitor thread.\n");
+        epicsThreadOnce(&bcYearOnceId, bcStartYearMonitorOnce, NULL);
     }
-    return OK;
+
 }
 
 /**********************************************************************************************************
@@ -1216,24 +1232,15 @@ void BCconfigure
     const int Offset            /* Offset in microseconds relative to input reference, +ve = correction for delay */
 )
 {
-    int status;
 
-    bcThisIsMaster = MasterIOC;            /* Master IOC? */
-    bcNoLeapSecs = NoLeapSecs;        /* Don't use leap secs? */
-    bcOffset = Offset;                /* Offset in microsecs */
-    if ((status = bcHardwareSetup()) != OK)        /* Initialise the hardware, abandon on failure */
-    {
-        printf("BCconfigure failed - Bancomm card not found\n");
-        return;
-    }
+    bc635TimePvt.bcThisIsMaster = MasterIOC;            /* Master IOC? */
+    bc635TimePvt.bcNoLeapSecs = NoLeapSecs;        /* Don't use leap secs? */
+    bc635TimePvt.bcOffset = Offset;                /* Offset in microsecs */
+    bc635TimePvt.ips = intPerSecond;
+    bc635TimePvt.ipt = intPerTick;
 
-    /* Start up the BC635 Time Provider */
-    if(bc635TimeTpPrio >= 0)
-       bc635Time_Init(bc635TimeTpPrio);
-    bc635Time_Report(1);
-
-    bc635IntEnable(2,"");                /* Enable Bancomm periodic interrupts */
-    bcClkRateSet(intPerSecond, intPerTick);        /* Set up the interrupt and tick rate */
+    /* Delay General Time Registration for the BC635 Time Provider */
+    initHookRegister(bc635Time_Init);
 
 }
 
@@ -1417,36 +1424,52 @@ epicsExportAddress(int, bcYearEpoch);
 
 #define NSEC_PER_SEC 1000000000
 
-static epicsThreadOnceId onceId = EPICS_THREAD_ONCE_INIT;
-
-
-static struct {
-   epicsMutexId     lock;
-   epicsUInt32      priority;
-   epicsUInt32      flywheeling;
-   epicsTimeStamp   syncTime;
-} bc635TimePvt;
-
-
-
 /* Initialization */
 static void bc635Time_InitOnce(void *priority)
 {
-   bc635TimePvt.lock        = epicsMutexCreate();
-   bc635TimePvt.priority    = *(int*)priority;
-   bc635TimePvt.flywheeling = pbc635->time[1] & 0x10;
-   bc635TimePvt.syncTime.secPastEpoch = 1;
-   bc635TimePvt.syncTime.nsec = 0;
+    int status;
 
-   /* Finally register as a time provider */
-   generalTimeRegisterCurrentProvider("bc635", 
-                                       bc635TimePvt.priority,
-                                       bc635TimeGetCurrent);
+    bc635TimePvt.lock        = epicsMutexCreate();
+    bc635TimePvt.priority    = *(int*)priority;
+    bc635TimePvt.flywheeling = pbc635->time[1] & 0x10;
+    bc635TimePvt.syncTime.secPastEpoch = 1;
+    bc635TimePvt.syncTime.nsec = 0;
+
+
+    if ((status = bcHardwareSetup()) != OK)        /* Initialise the hardware, abandon on failure */
+    {
+        printf("BCconfigure failed - Bancomm card not found\n");
+        return;
+    }
+    
+    /* Finally register as a time provider */
+    generalTimeRegisterCurrentProvider("bc635", 
+            bc635TimePvt.priority,
+            bc635TimeGetCurrent);
+
+    /*Give Registration some time...*/ 
+    epicsThreadSleep(2.0);
+    bc635Time_Report(1);
+
+    bc635IntEnable(2,"");                               /* Enable Bancomm periodic interrupts */
+    bcClkRateSet(bc635TimePvt.ips, bc635TimePvt.ipt);   /* Set up the interrupt and tick rate */
+
 }  
   
-void bc635Time_Init(int priority)
+void bc635Time_Init(initHookState state)
 {
-   epicsThreadOnce(&onceId, bc635Time_InitOnce, &priority);
+    if(bc635TimeTpPrio <= 0) {printf("BC635 Disabled\n"); return;}
+
+    /* See initHooks.h
+     * 
+     * My choice for initHook is BEFORE Device Support
+     * */
+    if (state == initHookAfterInitDrvSup) {
+     
+        printf("****BC635 General Time Registration******\n"); 
+        epicsThreadOnce(&onceId, bc635Time_InitOnce, &bc635TimeTpPrio);
+
+    }
 }
 
 
