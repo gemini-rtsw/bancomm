@@ -1026,10 +1026,9 @@ int NTPgetTime (struct tm **gtime)
     time_t utime;
 
     /* note: this doesn't necessarily get the time from an NTP server.... */
-    if (epicsTimeGetCurrent(&ets) != epicsTimeOK) {
-        
+    /* don't get current time from Bancomm board! */
+    if (generalTimeGetExceptPriority(&ets, NULL, bc635TimeTpPrio) != epicsTimeOK) {
         return -1;            /* If error, return year as -1 */
-
     }
                     /* NTP epoch is 1900 */
     epicsTimeToTimespec(&sp, &ets); /* Convert EPICS timestamp to POSIX struct timespec */
@@ -1192,7 +1191,7 @@ void bcSetRTC(void)
     time_t utime;
 
     //epicsTimeGetCurrent(&ets);
-    generalTimeGetExceptPriority(&ets, &bc635TimeTpPrio, 1); /* don't get current time from Bancomm board! */
+    generalTimeGetExceptPriority(&ets, NULL, bc635TimeTpPrio); /* don't get current time from Bancomm board! */
     epicsTimeToTimespec(&sp, &ets); /* Convert EPICS timestamp to POSIX struct timespec */
     fracsec = 1.0 - (sp.tv_nsec/1000000000.0);
                     /* NTP epoch is 1900 */
