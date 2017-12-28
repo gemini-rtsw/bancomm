@@ -155,8 +155,6 @@ typedef struct {
     epicsUInt16 res2[8];     /* Reserved */
 } volatile bc635Regs_t;
 
-//static long report();
-//static long init();
 int bc635Time_Report(int);
 static int bc635TimeGetCurrent(epicsTimeStamp *);
 int bc635TimeSetTpPrio(int);
@@ -1019,24 +1017,19 @@ long bc635_report (int level)
 *
 *  NOMANUAL
 */
-int NTPgetTime (struct tm **gtime)
+
+int NTPgetTime (struct tm *pGtime)
 {
     epicsTimeStamp ets;
-    struct timespec sp;
-    time_t utime;
+    unsigned long nSecDummy = 0;
 
     /* note: this doesn't necessarily get the time from an NTP server.... */
     /* don't get current time from Bancomm board! */
     if (generalTimeGetExceptPriority(&ets, NULL, bc635TimeTpPrio) != epicsTimeOK) {
         return -1;            /* If error, return year as -1 */
     }
-                    /* NTP epoch is 1900 */
-    epicsTimeToTimespec(&sp, &ets); /* Convert EPICS timestamp to POSIX struct timespec */
 
-    utime = sp.tv_sec;
-
-    *gtime = gmtime(&utime);        /* Convert to broken down time */
-                    /* in struct tm */
+    epicsTimeToTM(pGtime, &nSecDummy, &ets);  /* convert epicsTimeStamp to struct tm */
     return 0;
 }
 
@@ -1085,49 +1078,30 @@ int bcSetEpoch(const int year)
 */
 int bcYearMonitor(void)
 {
-    int status,year;
-    int first_try_count = 0;
-    struct tm *gtime;
+    static int        year;
+    static struct tm gtime;
+    static int       retry;
 
-
-    do {
-        first_try_count++;
-        if (first_try_count >25 ) return ERROR;        /* Give up eventually */
-        status = NTPgetTime(&gtime);
-        if (status == 0) {
-            year = 1900 + gtime->tm_year;
-            printf("Setting year to %d...\n", year);
-            if (year > 1993 && year < 2050) {    /* If value OK, only during epoch 1994-2049 */
-                bcYearNumber = year;        /* Set year number */
-                bcSetEpoch(year);        /* Calculate and set epoch */
-
-            }
-        }
-        else {
-            printf("NTPgetTime returning error status=%d\n", status);
-            year = 0;
-            epicsThreadSleep( 5); /* Problem? - wait a few seconds */
-        }
-    } while ((status != 0) || year < 1994 || year > 2049);
-
-    /* Wait for xx:30 */
-    /*
-      epicsThreadSleep(clock_rate_get() * 60 * (30 - gtime->tm_min));
-     */
-
-    while (1) {                /* Now loop forever */
-        status = NTPgetTime(&gtime);
-        if (status == 0) {
-            year = 1900 + gtime->tm_year;    /* add 1900 to get year number */
-            if (year > 1993 && year < 2050) {    /* If value OK, only during epoch 1994-2049 */
+    while (1) {                /* loop forever */
+        if(NTPgetTime(&gtime) == epicsTimeOK) {
+            retry = 0;                        /* reset retry counter         */
+            year = 1900 + gtime.tm_year;      /* add 1900 to get year number */
+            if (year > 1993 && year < 2050) { /* If value OK, only during epoch 1994-2049 */
                if(bcYearNumber != year) {
                   bcYearNumber = year;        /* Set year number */
                   bcSetEpoch(year);           /* Calculate and set epoch */
                }
             }
+            epicsThreadSleep(YEAR_MONITOR_SLEEP);   /* Check again in an hour */
         }
-         epicsThreadSleep(YEAR_MONITOR_SLEEP);   /* Now wait specified number of seconds (1 hour) */
-         /* epicsThreadSleep(60.0);  */
+        else {
+           retry++;      /* increment retry counter */
+           if (retry >= 25) {
+              errlogMessage("bcYearMonitor can't get current time");
+              epicsThreadSleep(YEAR_MONITOR_SLEEP);   /* a longer term outage -- try again in an hour */
+           }
+           epicsThreadSleep(5.0); /* maybe there is a momentary outage -- try again in 5 seconds */
+        }
     }
 }
 
