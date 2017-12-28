@@ -105,6 +105,7 @@
 #include <errMdef.h>
 #include <errlog.h>
 #include <envDefs.h>
+#include <time.h> /*For timegm()*/
 
 #include "bc635.h"
 #include "osdClockFuncs.h"
@@ -1046,7 +1047,8 @@ int NTPgetTime (struct tm *pGtime)
 */
 int bcSetEpoch(const int year)
 {
-    struct tm gtime;
+    struct tm gtime, *testtime;
+    int offset = 0 ;
 
     gtime.tm_sec = 0;
     gtime.tm_min = 0;
@@ -1054,8 +1056,17 @@ int bcSetEpoch(const int year)
     gtime.tm_mday = 1;
     gtime.tm_mon = 0;
     gtime.tm_year = year - 1900;    /* Date for this year, Jan 1st, 00:00:00 UTC */
-    printf("bcSetEpoch year is %d\n", year);
+
     bcYearEpoch = mktime(&gtime);    /* Calculate current start of year epoch */
+
+    testtime = gmtime((time_t*) &bcYearEpoch);
+
+    offset = testtime->tm_hour * 3600 + testtime->tm_min * 60 + testtime->tm_sec; 
+
+    bcYearEpoch -= offset;
+
+    printf("bcSetEpoch for year %d \n", bcYearEpoch);
+
     return 0;
 }
 
