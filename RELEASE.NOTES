@@ -1,0 +1,12 @@
+19 December 2017   1-6-5
+      Released with EPICS set to: V3.14.15.7
+
+27 December 2017   1-6-6
+      * Merged back into trunk some bugfixes and improvements.
+      * Introduced the use of Init Hooks to time various aspects of the
+        driver initialization.
+
+28 December 2017   1-6-7
+      This version fixes for good the "variable timezone" bug. While the
+      causes of the variability are still not clear, the fix makes sure
+      that the Bancomm driver returns always UTC timestamps.
