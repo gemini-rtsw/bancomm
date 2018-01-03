@@ -136,6 +136,24 @@
 #define BC635CMD_HBEN       0x02    /* Set=Enable periodic time capture */
 #define BC635CMD_LOCKEN     0x01    /* Set=Enable event lockout */
 
+/* structure with exploded Bancomm time info */
+typedef struct {
+    epicsUInt16 yday;
+    epicsUInt16 hour;
+    epicsUInt16 min;
+    epicsUInt16 sec;
+    epicsUInt32 usec;
+    union {
+	    epicsUInt16 raw;
+	    struct {
+		    unsigned meaningless : 13;
+		    unsigned large_freq_offset : 1;
+		    unsigned large_time_offset : 1;
+		    unsigned source_not_locked : 1;
+	    } bits;
+    } status;
+} bancomm_t;
+
 /*bc635 memory structure*/
 typedef struct {
     epicsUInt16 dev_id;      /* VXIbus ID Register */
@@ -731,6 +749,45 @@ int bc635IntEnable (const epicsUInt16 signal, const char *parm )
         if (signal != 2) scanIoInit(&ioscanpvt[intnum - 1]);
     }
     return OK;
+}
+
+/**********************************************************************************************************
+*
+*  bc635RegsRead - Access the Bancomm registers to extract
+*                  the current time
+*
+* Read the current time registers and return the time as
+* a struct tm
+*
+* RETURNS:
+* OK or ERROR (no Bancomm or Bancomm status bit file; NULL target)
+*
+*/
+int bc635RegsRead(bancomm_t *target) {
+	epicsUInt16		dummy;
+	unsigned char		stime[10];
+	register int		lockKey;
+	int i;
+
+	if (!target)
+		return ERROR;
+
+	lockKey = epicsInterruptLock();            /* Disable interrupts */
+	dummy = pbc635->time_req;        /* Latch time registers */
+	for(i=0; i<10; i++) {
+		stime[i] = pbc635->time[i];
+	}
+	epicsInterruptUnlock(lockKey);            /* Re-enable interrupts */
+
+	target->yday = (stime[1] & 0xf)*100 + bcdtoi(stime[2]);
+	target->hour = bcdtoi(stime[3]);
+	target->min  = bcdtoi(stime[4]);
+	target->sec  = bcdtoi(stime[5]);
+	target->usec = (bcdtoi(stime[6]) * 100 + bcdtoi(stime[7])) * 100 +
+			bcdtoi(stime[8]);
+	target->status.raw = (stime[1] & 0x70) >> 4;
+
+	return OK;
 }
 
 /**********************************************************************************************************
@@ -1580,3 +1637,32 @@ static void bc635TimeRegister(void) {
 }
 epicsExportRegistrar(bc635TimeRegister);
 
+/* Debug Report */
+static void bc635Debug_Report(void) {
+	bancomm_t tm;
+	if (bc635RegsRead(&tm) == OK) {
+		printf("Registers: Time\n");
+		printf("\tDay:     %d\n", tm.yday);
+		printf("\tHour:    %d\n", tm.hour);
+		printf("\tMinute:  %d\n", tm.min);
+		printf("\tSecond:  %d\n", tm.sec);
+		printf("\tuSecond: %d\n", tm.usec);
+		printf("Status:\n");
+		printf("  Locked to source?     %s\n", tm.status.bits.source_not_locked ? "NO" : "YES");
+		printf("  >> Frequency offset?  %s\n", tm.status.bits.large_freq_offset ? "NO" : "YES");
+		printf("  >> Time offset?       %s\n", tm.status.bits.large_time_offset ? "NO" : "YES");
+	}
+	else {
+		printf("Error while trying to read the Bancomm registers\n");
+	}
+}
+
+static const iocshFuncDef bc635Debug_ReportFuncDef = {"bc635Debug", 0, NULL};
+static void bc635Debug_ReportCallFunc(const iocshArgBuf *args) {
+	bc635Debug_Report();
+}
+
+static void bc635DebugRegister(void) {
+	iocshRegister(&bc635Debug_ReportFuncDef, bc635Debug_ReportCallFunc);
+}
+epicsExportRegistrar(bc635DebugRegister);
