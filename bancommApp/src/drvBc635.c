@@ -187,7 +187,9 @@ struct {
 } drvBc635={
         2,
         bc635_report,
-        bc635_init};
+        bc635_init
+};
+
 epicsExportAddress(drvet, drvBc635);
 
 static bc635Regs_t  *pbc635 = NULL;   /* Pointer to bc635 register structure */
@@ -230,22 +232,6 @@ static struct {
 /* Declare pointer to user definable function called on each interrupt */
 void (*bcUsrClock)(const int icount) = NULL;
 
-/* Following two routines are wrap-arounds for the local report and init functions
-*  to provide standard calls from EPICS device support
-*/
-#if 0
-static long report(int level)
-{
-    bc635_report(level);
-    return(0);
-}
-
-static long init()
-{
-    bc635_init();
-    return(0);
-}
-#endif
 
 /**********************************************************************************************************
 *
@@ -1053,20 +1039,67 @@ int bc635_write (const epicsUInt16 signal, const double value)
 */
 long bc635_report (int level)
 {
-    if (bcTestCard() != OK)
-    {
-        printf("Bancomm 635/637 card not found\n");
-        return OK;
-    }
-    else
-    {
-        printf("Bancomm 635 board at address 0x%04X\n",BC635_ADDR0);
-        if ( (pbc635->time[1] & 0x10) != 0)
-            printf("TFP is flywheeling (not locked)\n");
+    if (level < 0 ) return OK;
+
+    /* Interest Level 0 or 1*/
+    if (level <= 1) {
+
+        if (bcTestCard() != OK)
+        {
+            printf("Bancomm 635/637 card not found\n");
+
+            /* If we cannot find the card, no further testing is sensible, return*/
+            return OK;
+        }
+
         else
-            printf("TFP is locked to selected reference\n");
-        return OK;
+        {
+            printf("Bancomm 635 board at address 0x%04X\n",BC635_ADDR0);
+            if ( (pbc635->time[1] & 0x10) != 0)
+                printf("TFP is flywheeling (not locked)\n");
+            else
+                printf("TFP is locked to selected reference\n");
+        }
     }
+
+    /* Include this for interest Level 2*/
+    if (level > 1 && level <= 2 ) {
+
+        if (onceId == EPICS_THREAD_ONCE_INIT) {
+            printf("BC635 Time Provider not initialized\n");
+        }
+        else {
+
+            char lastSync[32];
+            epicsTimeToStrftime(lastSync, sizeof(lastSync),
+                    "%Y-%m-%d %H:%M:%S.%06f", &bc635TimePvt.syncTime);
+            printf("\tpriority = %u\n", bc635TimePvt.priority);
+            printf("\t%s\n", bc635TimePvt.flywheeling?"Flywheeling (not locked to reference)":"Locked to reference");
+            printf("\tLast successful sync was at %s\n", lastSync);
+        }
+    }
+
+    /* Interest Level Greater than 2*/
+    if (level > 2) {
+	bancomm_t tm;
+	if (bc635RegsRead(&tm) == OK) {
+		printf("Registers: Time\n");
+		printf("\tDay:     %d\n", tm.yday);
+		printf("\tHour:    %d\n", tm.hour);
+		printf("\tMinute:  %d\n", tm.min);
+		printf("\tSecond:  %d\n", tm.sec);
+		printf("\tuSecond: %d\n", tm.usec);
+		printf("Status:\n");
+		printf("  Locked to source?     %s\n", tm.status.bits.source_not_locked ? "NO" : "YES");
+		printf("  >> Frequency offset?  %s\n", tm.status.bits.large_freq_offset ? "NO" : "YES");
+		printf("  >> Time offset?       %s\n", tm.status.bits.large_time_offset ? "NO" : "YES");
+	}
+	else {
+		printf("Error while trying to read the Bancomm registers\n");
+	}
+    }
+
+    return OK;
 }
 
 /**********************************************************************************************************
@@ -1587,29 +1620,6 @@ int bc635TimeSetTpPrio(int prio)
    return 0;
 }
 
-
-
-/* Status Report */
-
-int bc635Time_Report(int level)
-{
-    if (onceId == EPICS_THREAD_ONCE_INIT) {
-        printf("BC635 Time Provider not initialized\n");
-    }
-    else {
-       printf("BC635 Time Provider registered\n");
-       if (level) {
-          char lastSync[32];
-          epicsTimeToStrftime(lastSync, sizeof(lastSync),
-                    "%Y-%m-%d %H:%M:%S.%06f", &bc635TimePvt.syncTime);
-          printf("\tpriority = %u\n", bc635TimePvt.priority);
-          printf("\t%s\n", bc635TimePvt.flywheeling?"Flywheeling (not locked to reference)":"Locked to reference");
-          printf("\tLast successful sync was at %s\n", lastSync);
-       }
-    }
-    return 0;
-}
-
 /* Set up to  export the report function to the IOC shell                         */
 static const iocshArg ReportArg0 = { "interest_level", iocshArgInt};
 
@@ -1637,32 +1647,3 @@ static void bc635TimeRegister(void) {
 }
 epicsExportRegistrar(bc635TimeRegister);
 
-/* Debug Report */
-static void bc635Debug_Report(void) {
-	bancomm_t tm;
-	if (bc635RegsRead(&tm) == OK) {
-		printf("Registers: Time\n");
-		printf("\tDay:     %d\n", tm.yday);
-		printf("\tHour:    %d\n", tm.hour);
-		printf("\tMinute:  %d\n", tm.min);
-		printf("\tSecond:  %d\n", tm.sec);
-		printf("\tuSecond: %d\n", tm.usec);
-		printf("Status:\n");
-		printf("  Locked to source?     %s\n", tm.status.bits.source_not_locked ? "NO" : "YES");
-		printf("  >> Frequency offset?  %s\n", tm.status.bits.large_freq_offset ? "NO" : "YES");
-		printf("  >> Time offset?       %s\n", tm.status.bits.large_time_offset ? "NO" : "YES");
-	}
-	else {
-		printf("Error while trying to read the Bancomm registers\n");
-	}
-}
-
-static const iocshFuncDef bc635Debug_ReportFuncDef = {"bc635Debug", 0, NULL};
-static void bc635Debug_ReportCallFunc(const iocshArgBuf *args) {
-	bc635Debug_Report();
-}
-
-static void bc635DebugRegister(void) {
-	iocshRegister(&bc635Debug_ReportFuncDef, bc635Debug_ReportCallFunc);
-}
-epicsExportRegistrar(bc635DebugRegister);
