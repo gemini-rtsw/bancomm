@@ -181,6 +181,7 @@ static int bcUseper;                  /* Whether to use BC periodics for sys clo
 static int bcConfiguredOK = 0;        /* Whether have a Bancomm at all */
 static int bcYearNumber = 42;         /* The current year number */
 static int bcYearEpoch = 0;           /* The epoch (wrt 1970) of Jan 1, Oh UTC of current year */
+static int bcDebug = 0;           /* The epoch (wrt 1970) of Jan 1, Oh UTC of current year */
 static int bcLastEpoch = 0;           /* Last year's epoch, saved when year changes */
 static int bcIntPerTick = 1;          /* Number of interrupts per clock tick */
 static int bcIntCounter = 0;          /* Count all interrupts */
@@ -836,7 +837,7 @@ int bcRegsToTime (double *prval, unsigned char *stime)
     bcdtoi(stime[8]);
     seconds = bcdtoi(stime[5]);
 
-    *prval = (days-1)*86400.0
+    *prval = days*86400.0
            + hours*3600.0
            + minutes*60.0
            + seconds*1.0
@@ -850,12 +851,16 @@ int bcRegsToTime (double *prval, unsigned char *stime)
     *prval += GPS_TO_TAI;        /* convert to GPS - bdg */
 
     /* Sanity check the time field values. Note 2 leap seconds permitted  */
-    if (days > 366 || days == 0 || hours > 23 || minutes > 59 ||
+    if (bcDebug || days > 366 || days == 0 || hours > 23 || minutes > 59 ||
             seconds > 61 || useconds > 999999)
     {
+        static int mycount;
         status = -1;
-        printf("days=%d, hours=%d, minutes=%d, seconds=%d, usecs=%ld\n",
-         days, hours, minutes, seconds, useconds);
+
+        if(mycount%200 == 0) printf("days=%d, hours=%d, minutes=%d, seconds=%d, usecs=%ld\n",
+                days, hours, minutes, seconds, useconds);
+
+        mycount++;
     }
 
     /* and check time status for errors :
@@ -1065,7 +1070,7 @@ int bcSetEpoch(const int year)
 
     bcYearEpoch -= offset;
 
-    printf("bcSetEpoch for year %d \n", bcYearEpoch);
+    printf("bcSetEpoch = %d, offset=%d \n", bcYearEpoch, offset);
 
     return 0;
 }
@@ -1403,6 +1408,7 @@ epicsExportAddress(int, bcIntCounter);
 epicsExportAddress(int, bcTickCnt);
 epicsExportAddress(int, bcConfiguredOK );
 epicsExportAddress(int, bcYearEpoch);
+epicsExportAddress(int, bcDebug);
 
 
 
@@ -1488,16 +1494,20 @@ static int bc635TimeGetCurrent(epicsTimeStamp *pDest)
        pDest->nsec = (cTime - (epicsUInt32)cTime)*NSEC_PER_SEC;
        if(!(bc635TimePvt.flywheeling = status & 0x01))
           bc635TimePvt.syncTime = *pDest;
+
     }
-#if 0
-{
-static int count;
-if(count%500 == 0) {
-   printf("cTime=%f, secPastEpoch=%d, nsec=%d\n", cTime, pDest->secPastEpoch, pDest->nsec);
-}
-count++;
-}
+
+#if 1
+
+    if (bcDebug) {
+        static int count;
+        if(count%200 == 0) {
+            printf("cTime=%f, secPastEpoch=%d, nsec=%d\n", cTime, pDest->secPastEpoch, pDest->nsec);
+        }
+        count++;
+    }
 #endif
+
     epicsMutexUnlock(bc635TimePvt.lock);
     if ((status & ~0x07) || bc635TimePvt.flywheeling)
        return epicsTimeERROR;
