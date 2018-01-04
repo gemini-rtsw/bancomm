@@ -863,7 +863,6 @@ int bcRegsToTime (double *prval, unsigned char *stime)
     register int status = OK;
     static epicsUInt16 prevdaynum;
 
-
     days = (stime[1] & 0xf)*100 + bcdtoi(stime[2]);
     if (days == 0) days++;
 
@@ -879,7 +878,7 @@ int bcRegsToTime (double *prval, unsigned char *stime)
     bcdtoi(stime[8]);
     seconds = bcdtoi(stime[5]);
 
-    *prval = days*86400.0
+    *prval = (days-1) *86400.0
            + hours*3600.0
            + minutes*60.0
            + seconds*1.0
@@ -1041,7 +1040,7 @@ long bc635_report (int level)
     if (level < 0 ) return OK;
 
     /* Interest Level 0 or 1*/
-    if (level <= 1) {
+    if (level >= 0) {
 
         if (bcTestCard() != OK)
         {
@@ -1062,7 +1061,7 @@ long bc635_report (int level)
     }
 
     /* Include this for interest Level 2*/
-    if (level > 1 && level <= 2 ) {
+    if (level >= 2 ) {
 
         if (onceId == EPICS_THREAD_ONCE_INIT) {
             printf("BC635 Time Provider not initialized\n");
@@ -1079,7 +1078,7 @@ long bc635_report (int level)
     }
 
     /* Interest Level Greater than 2*/
-    if (level > 2) {
+    if (level >= 3) {
 	bancomm_t tm;
 	if (bc635RegsRead(&tm) == OK) {
 		printf("Registers: Time\n");
