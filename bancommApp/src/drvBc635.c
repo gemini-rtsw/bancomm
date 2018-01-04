@@ -174,7 +174,6 @@ typedef struct {
     epicsUInt16 res2[8];     /* Reserved */
 } volatile bc635Regs_t;
 
-int bc635Time_Report(int);
 static int bc635TimeGetCurrent(epicsTimeStamp *);
 int bc635TimeSetTpPrio(int);
 static void bcStartYearMonitor(initHookState state);
@@ -1444,64 +1443,6 @@ void bcSendOcode(char *charptr )
         printf("Error: Timed out waiting for response to %s\n", charptr);
 }
 
-/* Register these symbols for use by IOC code */
-/* Information needed by iocsh */
-static const iocshArg     bc635_reportArg0 = {"interest_level", iocshArgInt};
-static const iocshArg    *bc635_reportArgs[] = { &bc635_reportArg0 };
-static const iocshFuncDef bc635_reportFuncDef = {"bc635_report", 1, bc635_reportArgs};
-
-/* Wrapper called by iocsh, selects the argument types that bc635_report needs */
-static void bc635_reportCallFunc(const iocshArgBuf *args) {
-    bc635_report(args[0].ival);
-}
-
-/* Registration routine, runs at startup */
-static void bc635_reportRegister(void) {
-    iocshRegister(&bc635_reportFuncDef, bc635_reportCallFunc);
-}
-
-/* Register these symbols for use by IOC code */
-/* Information needed by iocsh */
-static const iocshArg     BCconfigureArg0 = {"master", iocshArgInt};  /* TRUE for Master IOC with bc637 GPS receiver */
-static const iocshArg     BCconfigureArg1 = {"useleap", iocshArgInt};  /* FALSE = use UTC; TRUE = GPS time, no leap secs */
-static const iocshArg     BCconfigureArg2 = {"intPerSecond", iocshArgInt};  /* Bancomm Periodic Frequency in Hz */
-static const iocshArg     BCconfigureArg3 = {"intPerTick", iocshArgInt};  /* Number of periodic interrupts per VxWorks system clock tick */
-static const iocshArg     BCconfigureArg4 = {"Offset", iocshArgInt};  /* Offset in microseconds relative to input reference, +ve = correction for delay */
-
-static const iocshArg    *BCconfigureArgs[] = {
-	&BCconfigureArg0,
-	&BCconfigureArg1,
-	&BCconfigureArg2,
-	&BCconfigureArg3,
-	&BCconfigureArg4,
-};
-
-static const iocshFuncDef BCconfigureFuncDef = {"BCconfigure", 5, BCconfigureArgs};
-
-/* Wrapper called by iocsh, selects the argument types that bc635_report needs */
-static void BCconfigureCallFunc(const iocshArgBuf *args) {
-    BCconfigure(args[0].ival, args[1].ival, args[2].ival, args[3].ival, args[4].ival );
-}
-
-/* Registration routine, runs at startup */
-static void BCconfigureRegister(void) {
-    iocshRegister(&BCconfigureFuncDef, BCconfigureCallFunc);
-}
-
-epicsExportRegistrar(bc635_reportRegister);
-epicsExportRegistrar(BCconfigureRegister);
-epicsExportAddress(int, altIntCounter1);
-epicsExportAddress(int, altIntCounter2);
-epicsExportAddress(int, bcReadCounter);
-epicsExportAddress(int, bcEventCounter);
-epicsExportAddress(int, bcIntCounter);
-epicsExportAddress(int, bcTickCnt);
-epicsExportAddress(int, bcConfiguredOK );
-epicsExportAddress(int, bcYearEpoch);
-epicsExportAddress(int, bcDebug);
-
-
-
 /*********************************************************************/
 /*   EPICS Time Provider section: maybe should be in a separate file */
 
@@ -1534,7 +1475,7 @@ static void bc635Time_InitOnce(void *priority)
      * By the time we get here, the provider is guaranteed to be registered
      */
     epicsThreadSleep(2.0);
-    bc635Time_Report(1);
+    bc635_report(1);
 
     bc635IntEnable(2, "");                              /* Enable Bancomm periodic interrupts */
     bcClkRateSet(bc635TimePvt.ips, bc635TimePvt.ipt);   /* Set up the interrupt and tick rate */
@@ -1620,16 +1561,48 @@ int bc635TimeSetTpPrio(int prio)
    return 0;
 }
 
-/* Set up to  export the report function to the IOC shell                         */
-static const iocshArg ReportArg0 = { "interest_level", iocshArgInt};
+/* Register these symbols for use by IOC code */
+/* Information needed by iocsh */
+static const iocshArg     bc635_reportArg0 = {"interest_level", iocshArgInt};
+static const iocshArg    *bc635_reportArgs[] = { &bc635_reportArg0 };
+static const iocshFuncDef bc635_reportFuncDef = {"bc635_report", 1, bc635_reportArgs};
 
-static const iocshArg * const ReportArgs[1] = { &ReportArg0 };
-static const iocshFuncDef bc635TimeReportFuncDef = {"bc635Time_Report", 1, ReportArgs};
-static void bc635TimeReportCallFunc(const iocshArgBuf *args)
-{
-    bc635Time_Report(args[0].ival);
+/* Wrapper called by iocsh, selects the argument types that bc635_report needs */
+static void bc635_reportCallFunc(const iocshArgBuf *args) {
+    bc635_report(args[0].ival);
 }
 
+/* Registration routine, runs at startup */
+static void bc635_reportRegister(void) {
+    iocshRegister(&bc635_reportFuncDef, bc635_reportCallFunc);
+}
+
+/* Register these symbols for use by IOC code */
+/* Information needed by iocsh */
+static const iocshArg     BCconfigureArg0 = {"master", iocshArgInt};  /* TRUE for Master IOC with bc637 GPS receiver */
+static const iocshArg     BCconfigureArg1 = {"useleap", iocshArgInt};  /* FALSE = use UTC; TRUE = GPS time, no leap secs */
+static const iocshArg     BCconfigureArg2 = {"intPerSecond", iocshArgInt};  /* Bancomm Periodic Frequency in Hz */
+static const iocshArg     BCconfigureArg3 = {"intPerTick", iocshArgInt};  /* Number of periodic interrupts per VxWorks system clock tick */
+static const iocshArg     BCconfigureArg4 = {"Offset", iocshArgInt};  /* Offset in microseconds relative to input reference, +ve = correction for delay */
+
+static const iocshArg    *BCconfigureArgs[] = {
+	&BCconfigureArg0,
+	&BCconfigureArg1,
+	&BCconfigureArg2,
+	&BCconfigureArg3,
+	&BCconfigureArg4,
+};
+
+static const iocshFuncDef BCconfigureFuncDef = {"BCconfigure", 5, BCconfigureArgs};
+/* Wrapper called by iocsh, selects the argument types that bc635_report needs */
+static void BCconfigureCallFunc(const iocshArgBuf *args) {
+    BCconfigure(args[0].ival, args[1].ival, args[2].ival, args[3].ival, args[4].ival );
+}
+
+/* Registration routine, runs at startup */
+static void BCconfigureRegister(void) {
+    iocshRegister(&BCconfigureFuncDef, BCconfigureCallFunc);
+}
 
 /* Set up to  export the time provider priority set function to the IOC shell                         */
 static const iocshArg bc635TimeSetTpPrioArg0 = {"BC635 Time Provider Priority", iocshArgInt};
@@ -1642,8 +1615,19 @@ static void bc635TimeSetTpPrioCallFunc(const iocshArgBuf *args)
 
 /* now register and export the shell functions */
 static void bc635TimeRegister(void) {
-   iocshRegister(&bc635TimeReportFuncDef, bc635TimeReportCallFunc);
    iocshRegister(&bc635TimeSetTpPrioFuncDef, bc635TimeSetTpPrioCallFunc);
 }
+
 epicsExportRegistrar(bc635TimeRegister);
+epicsExportRegistrar(bc635_reportRegister);
+epicsExportRegistrar(BCconfigureRegister);
+epicsExportAddress(int, altIntCounter1);
+epicsExportAddress(int, altIntCounter2);
+epicsExportAddress(int, bcReadCounter);
+epicsExportAddress(int, bcEventCounter);
+epicsExportAddress(int, bcIntCounter);
+epicsExportAddress(int, bcTickCnt);
+epicsExportAddress(int, bcConfiguredOK );
+epicsExportAddress(int, bcYearEpoch);
+epicsExportAddress(int, bcDebug);
 
