@@ -10,3 +10,7 @@
       This version fixes for good the "variable timezone" bug. While the
       causes of the variability are still not clear, the fix makes sure
       that the Bancomm driver returns always UTC timestamps.
+
+03 January 2018 bugfix...
+      Cleanup all the various reporting functions. Refactor the report
+      to include the debugging info from Ricardo.

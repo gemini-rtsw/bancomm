@@ -136,6 +136,24 @@
 #define BC635CMD_HBEN       0x02    /* Set=Enable periodic time capture */
 #define BC635CMD_LOCKEN     0x01    /* Set=Enable event lockout */
 
+/* structure with exploded Bancomm time info */
+typedef struct {
+    epicsUInt16 yday;
+    epicsUInt16 hour;
+    epicsUInt16 min;
+    epicsUInt16 sec;
+    epicsUInt32 usec;
+    union {
+	    epicsUInt16 raw;
+	    struct {
+		    unsigned meaningless : 13;
+		    unsigned large_freq_offset : 1;
+		    unsigned large_time_offset : 1;
+		    unsigned source_not_locked : 1;
+	    } bits;
+    } status;
+} bancomm_t;
+
 /*bc635 memory structure*/
 typedef struct {
     epicsUInt16 dev_id;      /* VXIbus ID Register */
@@ -156,7 +174,6 @@ typedef struct {
     epicsUInt16 res2[8];     /* Reserved */
 } volatile bc635Regs_t;
 
-int bc635Time_Report(int);
 static int bc635TimeGetCurrent(epicsTimeStamp *);
 int bc635TimeSetTpPrio(int);
 static void bcStartYearMonitor(initHookState state);
@@ -169,7 +186,9 @@ struct {
 } drvBc635={
         2,
         bc635_report,
-        bc635_init};
+        bc635_init
+};
+
 epicsExportAddress(drvet, drvBc635);
 
 static bc635Regs_t  *pbc635 = NULL;   /* Pointer to bc635 register structure */
@@ -181,6 +200,7 @@ static int bcUseper;                  /* Whether to use BC periodics for sys clo
 static int bcConfiguredOK = 0;        /* Whether have a Bancomm at all */
 static int bcYearNumber = 42;         /* The current year number */
 static int bcYearEpoch = 0;           /* The epoch (wrt 1970) of Jan 1, Oh UTC of current year */
+static int bcDebug = 0;           /* The epoch (wrt 1970) of Jan 1, Oh UTC of current year */
 static int bcLastEpoch = 0;           /* Last year's epoch, saved when year changes */
 static int bcIntPerTick = 1;          /* Number of interrupts per clock tick */
 static int bcIntCounter = 0;          /* Count all interrupts */
@@ -211,22 +231,6 @@ static struct {
 /* Declare pointer to user definable function called on each interrupt */
 void (*bcUsrClock)(const int icount) = NULL;
 
-/* Following two routines are wrap-arounds for the local report and init functions
-*  to provide standard calls from EPICS device support
-*/
-#if 0
-static long report(int level)
-{
-    bc635_report(level);
-    return(0);
-}
-
-static long init()
-{
-    bc635_init();
-    return(0);
-}
-#endif
 
 /**********************************************************************************************************
 *
@@ -734,6 +738,45 @@ int bc635IntEnable (const epicsUInt16 signal, const char *parm )
 
 /**********************************************************************************************************
 *
+*  bc635RegsRead - Access the Bancomm registers to extract
+*                  the current time
+*
+* Read the current time registers and return the time as
+* a struct tm
+*
+* RETURNS:
+* OK or ERROR (no Bancomm or Bancomm status bit file; NULL target)
+*
+*/
+int bc635RegsRead(bancomm_t *target) {
+	epicsUInt16		dummy;
+	unsigned char		stime[10];
+	register int		lockKey;
+	int i;
+
+	if (!target)
+		return ERROR;
+
+	lockKey = epicsInterruptLock();            /* Disable interrupts */
+	dummy = pbc635->time_req;        /* Latch time registers */
+	for(i=0; i<10; i++) {
+		stime[i] = pbc635->time[i];
+	}
+	epicsInterruptUnlock(lockKey);            /* Re-enable interrupts */
+
+	target->yday = (stime[1] & 0xf)*100 + bcdtoi(stime[2]);
+	target->hour = bcdtoi(stime[3]);
+	target->min  = bcdtoi(stime[4]);
+	target->sec  = bcdtoi(stime[5]);
+	target->usec = (bcdtoi(stime[6]) * 100 + bcdtoi(stime[7])) * 100 +
+			bcdtoi(stime[8]);
+	target->status.raw = (stime[1] & 0x70) >> 4;
+
+	return OK;
+}
+
+/**********************************************************************************************************
+*
 *  bc635_read - Read time
 *
 * Read the current time registers and return the time
@@ -820,7 +863,6 @@ int bcRegsToTime (double *prval, unsigned char *stime)
     register int status = OK;
     static epicsUInt16 prevdaynum;
 
-
     days = (stime[1] & 0xf)*100 + bcdtoi(stime[2]);
     if (days == 0) days++;
 
@@ -836,7 +878,7 @@ int bcRegsToTime (double *prval, unsigned char *stime)
     bcdtoi(stime[8]);
     seconds = bcdtoi(stime[5]);
 
-    *prval = (days-1)*86400.0
+    *prval = (days-1) *86400.0
            + hours*3600.0
            + minutes*60.0
            + seconds*1.0
@@ -850,12 +892,16 @@ int bcRegsToTime (double *prval, unsigned char *stime)
     *prval += GPS_TO_TAI;        /* convert to GPS - bdg */
 
     /* Sanity check the time field values. Note 2 leap seconds permitted  */
-    if (days > 366 || days == 0 || hours > 23 || minutes > 59 ||
+    if (bcDebug || days > 366 || days == 0 || hours > 23 || minutes > 59 ||
             seconds > 61 || useconds > 999999)
     {
+        static int mycount;
         status = -1;
-        printf("days=%d, hours=%d, minutes=%d, seconds=%d, usecs=%ld\n",
-         days, hours, minutes, seconds, useconds);
+
+        if(mycount%200 == 0) printf("days=%d, hours=%d, minutes=%d, seconds=%d, usecs=%ld\n",
+                days, hours, minutes, seconds, useconds);
+
+        mycount++;
     }
 
     /* and check time status for errors :
@@ -991,20 +1037,67 @@ int bc635_write (const epicsUInt16 signal, const double value)
 */
 long bc635_report (int level)
 {
-    if (bcTestCard() != OK)
-    {
-        printf("Bancomm 635/637 card not found\n");
-        return OK;
-    }
-    else
-    {
-        printf("Bancomm 635 board at address 0x%04X\n",BC635_ADDR0);
-        if ( (pbc635->time[1] & 0x10) != 0)
-            printf("TFP is flywheeling (not locked)\n");
+    if (level < 0 ) return OK;
+
+    /* Interest Level 0 or 1*/
+    if (level >= 0) {
+
+        if (bcTestCard() != OK)
+        {
+            printf("Bancomm 635/637 card not found\n");
+
+            /* If we cannot find the card, no further testing is sensible, return*/
+            return OK;
+        }
+
         else
-            printf("TFP is locked to selected reference\n");
-        return OK;
+        {
+            printf("Bancomm 635 board at address 0x%04X\n",BC635_ADDR0);
+            if ( (pbc635->time[1] & 0x10) != 0)
+                printf("TFP is flywheeling (not locked)\n");
+            else
+                printf("TFP is locked to selected reference\n");
+        }
     }
+
+    /* Include this for interest Level 2*/
+    if (level >= 2 ) {
+
+        if (onceId == EPICS_THREAD_ONCE_INIT) {
+            printf("BC635 Time Provider not initialized\n");
+        }
+        else {
+
+            char lastSync[32];
+            epicsTimeToStrftime(lastSync, sizeof(lastSync),
+                    "%Y-%m-%d %H:%M:%S.%06f", &bc635TimePvt.syncTime);
+            printf("\tpriority = %u\n", bc635TimePvt.priority);
+            printf("\t%s\n", bc635TimePvt.flywheeling?"Flywheeling (not locked to reference)":"Locked to reference");
+            printf("\tLast successful sync was at %s\n", lastSync);
+        }
+    }
+
+    /* Interest Level Greater than 2*/
+    if (level >= 3) {
+	bancomm_t tm;
+	if (bc635RegsRead(&tm) == OK) {
+		printf("Registers: Time\n");
+		printf("\tDay:     %d\n", tm.yday);
+		printf("\tHour:    %d\n", tm.hour);
+		printf("\tMinute:  %d\n", tm.min);
+		printf("\tSecond:  %d\n", tm.sec);
+		printf("\tuSecond: %d\n", tm.usec);
+		printf("Status:\n");
+		printf("  Locked to source?     %s\n", tm.status.bits.source_not_locked ? "NO" : "YES");
+		printf("  >> Frequency offset?  %s\n", tm.status.bits.large_freq_offset ? "NO" : "YES");
+		printf("  >> Time offset?       %s\n", tm.status.bits.large_time_offset ? "NO" : "YES");
+	}
+	else {
+		printf("Error while trying to read the Bancomm registers\n");
+	}
+    }
+
+    return OK;
 }
 
 /**********************************************************************************************************
@@ -1065,7 +1158,7 @@ int bcSetEpoch(const int year)
 
     bcYearEpoch -= offset;
 
-    printf("bcSetEpoch for year %d \n", bcYearEpoch);
+    printf("bcSetEpoch = %d, offset=%d \n", bcYearEpoch, offset);
 
     return 0;
 }
@@ -1349,63 +1442,6 @@ void bcSendOcode(char *charptr )
         printf("Error: Timed out waiting for response to %s\n", charptr);
 }
 
-/* Register these symbols for use by IOC code */
-/* Information needed by iocsh */
-static const iocshArg     bc635_reportArg0 = {"interest_level", iocshArgInt};
-static const iocshArg    *bc635_reportArgs[] = { &bc635_reportArg0 };
-static const iocshFuncDef bc635_reportFuncDef = {"bc635_report", 1, bc635_reportArgs};
-
-/* Wrapper called by iocsh, selects the argument types that bc635_report needs */
-static void bc635_reportCallFunc(const iocshArgBuf *args) {
-    bc635_report(args[0].ival);
-}
-
-/* Registration routine, runs at startup */
-static void bc635_reportRegister(void) {
-    iocshRegister(&bc635_reportFuncDef, bc635_reportCallFunc);
-}
-
-/* Register these symbols for use by IOC code */
-/* Information needed by iocsh */
-static const iocshArg     BCconfigureArg0 = {"master", iocshArgInt};  /* TRUE for Master IOC with bc637 GPS receiver */
-static const iocshArg     BCconfigureArg1 = {"useleap", iocshArgInt};  /* FALSE = use UTC; TRUE = GPS time, no leap secs */
-static const iocshArg     BCconfigureArg2 = {"intPerSecond", iocshArgInt};  /* Bancomm Periodic Frequency in Hz */
-static const iocshArg     BCconfigureArg3 = {"intPerTick", iocshArgInt};  /* Number of periodic interrupts per VxWorks system clock tick */
-static const iocshArg     BCconfigureArg4 = {"Offset", iocshArgInt};  /* Offset in microseconds relative to input reference, +ve = correction for delay */
-
-static const iocshArg    *BCconfigureArgs[] = {
-	&BCconfigureArg0,
-	&BCconfigureArg1,
-	&BCconfigureArg2,
-	&BCconfigureArg3,
-	&BCconfigureArg4,
-};
-
-static const iocshFuncDef BCconfigureFuncDef = {"BCconfigure", 5, BCconfigureArgs};
-
-/* Wrapper called by iocsh, selects the argument types that bc635_report needs */
-static void BCconfigureCallFunc(const iocshArgBuf *args) {
-    BCconfigure(args[0].ival, args[1].ival, args[2].ival, args[3].ival, args[4].ival );
-}
-
-/* Registration routine, runs at startup */
-static void BCconfigureRegister(void) {
-    iocshRegister(&BCconfigureFuncDef, BCconfigureCallFunc);
-}
-
-epicsExportRegistrar(bc635_reportRegister);
-epicsExportRegistrar(BCconfigureRegister);
-epicsExportAddress(int, altIntCounter1);
-epicsExportAddress(int, altIntCounter2);
-epicsExportAddress(int, bcReadCounter);
-epicsExportAddress(int, bcEventCounter);
-epicsExportAddress(int, bcIntCounter);
-epicsExportAddress(int, bcTickCnt);
-epicsExportAddress(int, bcConfiguredOK );
-epicsExportAddress(int, bcYearEpoch);
-
-
-
 /*********************************************************************/
 /*   EPICS Time Provider section: maybe should be in a separate file */
 
@@ -1438,7 +1474,7 @@ static void bc635Time_InitOnce(void *priority)
      * By the time we get here, the provider is guaranteed to be registered
      */
     epicsThreadSleep(2.0);
-    bc635Time_Report(1);
+    bc635_report(1);
 
     bc635IntEnable(2, "");                              /* Enable Bancomm periodic interrupts */
     bcClkRateSet(bc635TimePvt.ips, bc635TimePvt.ipt);   /* Set up the interrupt and tick rate */
@@ -1488,16 +1524,20 @@ static int bc635TimeGetCurrent(epicsTimeStamp *pDest)
        pDest->nsec = (cTime - (epicsUInt32)cTime)*NSEC_PER_SEC;
        if(!(bc635TimePvt.flywheeling = status & 0x01))
           bc635TimePvt.syncTime = *pDest;
+
     }
-#if 0
-{
-static int count;
-if(count%500 == 0) {
-   printf("cTime=%f, secPastEpoch=%d, nsec=%d\n", cTime, pDest->secPastEpoch, pDest->nsec);
-}
-count++;
-}
+
+#if 1
+
+    if (bcDebug) {
+        static int count;
+        if(count%200 == 0) {
+            printf("cTime=%f, secPastEpoch=%d, nsec=%d\n", cTime, pDest->secPastEpoch, pDest->nsec);
+        }
+        count++;
+    }
 #endif
+
     epicsMutexUnlock(bc635TimePvt.lock);
     if ((status & ~0x07) || bc635TimePvt.flywheeling)
        return epicsTimeERROR;
@@ -1520,39 +1560,48 @@ int bc635TimeSetTpPrio(int prio)
    return 0;
 }
 
+/* Register these symbols for use by IOC code */
+/* Information needed by iocsh */
+static const iocshArg     bc635_reportArg0 = {"interest_level", iocshArgInt};
+static const iocshArg    *bc635_reportArgs[] = { &bc635_reportArg0 };
+static const iocshFuncDef bc635_reportFuncDef = {"bc635_report", 1, bc635_reportArgs};
 
-
-/* Status Report */
-
-int bc635Time_Report(int level)
-{
-    if (onceId == EPICS_THREAD_ONCE_INIT) {
-        printf("BC635 Time Provider not initialized\n");
-    }
-    else {
-       printf("BC635 Time Provider registered\n");
-       if (level) {
-          char lastSync[32];
-          epicsTimeToStrftime(lastSync, sizeof(lastSync),
-                    "%Y-%m-%d %H:%M:%S.%06f", &bc635TimePvt.syncTime);
-          printf("\tpriority = %u\n", bc635TimePvt.priority);
-          printf("\t%s\n", bc635TimePvt.flywheeling?"Flywheeling (not locked to reference)":"Locked to reference");
-          printf("\tLast successful sync was at %s\n", lastSync);
-       }
-    }
-    return 0;
+/* Wrapper called by iocsh, selects the argument types that bc635_report needs */
+static void bc635_reportCallFunc(const iocshArgBuf *args) {
+    bc635_report(args[0].ival);
 }
 
-/* Set up to  export the report function to the IOC shell                         */
-static const iocshArg ReportArg0 = { "interest_level", iocshArgInt};
-
-static const iocshArg * const ReportArgs[1] = { &ReportArg0 };
-static const iocshFuncDef bc635TimeReportFuncDef = {"bc635Time_Report", 1, ReportArgs};
-static void bc635TimeReportCallFunc(const iocshArgBuf *args)
-{
-    bc635Time_Report(args[0].ival);
+/* Registration routine, runs at startup */
+static void bc635_reportRegister(void) {
+    iocshRegister(&bc635_reportFuncDef, bc635_reportCallFunc);
 }
 
+/* Register these symbols for use by IOC code */
+/* Information needed by iocsh */
+static const iocshArg     BCconfigureArg0 = {"master", iocshArgInt};  /* TRUE for Master IOC with bc637 GPS receiver */
+static const iocshArg     BCconfigureArg1 = {"useleap", iocshArgInt};  /* FALSE = use UTC; TRUE = GPS time, no leap secs */
+static const iocshArg     BCconfigureArg2 = {"intPerSecond", iocshArgInt};  /* Bancomm Periodic Frequency in Hz */
+static const iocshArg     BCconfigureArg3 = {"intPerTick", iocshArgInt};  /* Number of periodic interrupts per VxWorks system clock tick */
+static const iocshArg     BCconfigureArg4 = {"Offset", iocshArgInt};  /* Offset in microseconds relative to input reference, +ve = correction for delay */
+
+static const iocshArg    *BCconfigureArgs[] = {
+	&BCconfigureArg0,
+	&BCconfigureArg1,
+	&BCconfigureArg2,
+	&BCconfigureArg3,
+	&BCconfigureArg4,
+};
+
+static const iocshFuncDef BCconfigureFuncDef = {"BCconfigure", 5, BCconfigureArgs};
+/* Wrapper called by iocsh, selects the argument types that bc635_report needs */
+static void BCconfigureCallFunc(const iocshArgBuf *args) {
+    BCconfigure(args[0].ival, args[1].ival, args[2].ival, args[3].ival, args[4].ival );
+}
+
+/* Registration routine, runs at startup */
+static void BCconfigureRegister(void) {
+    iocshRegister(&BCconfigureFuncDef, BCconfigureCallFunc);
+}
 
 /* Set up to  export the time provider priority set function to the IOC shell                         */
 static const iocshArg bc635TimeSetTpPrioArg0 = {"BC635 Time Provider Priority", iocshArgInt};
@@ -1565,8 +1614,19 @@ static void bc635TimeSetTpPrioCallFunc(const iocshArgBuf *args)
 
 /* now register and export the shell functions */
 static void bc635TimeRegister(void) {
-   iocshRegister(&bc635TimeReportFuncDef, bc635TimeReportCallFunc);
    iocshRegister(&bc635TimeSetTpPrioFuncDef, bc635TimeSetTpPrioCallFunc);
 }
+
 epicsExportRegistrar(bc635TimeRegister);
+epicsExportRegistrar(bc635_reportRegister);
+epicsExportRegistrar(BCconfigureRegister);
+epicsExportAddress(int, altIntCounter1);
+epicsExportAddress(int, altIntCounter2);
+epicsExportAddress(int, bcReadCounter);
+epicsExportAddress(int, bcEventCounter);
+epicsExportAddress(int, bcIntCounter);
+epicsExportAddress(int, bcTickCnt);
+epicsExportAddress(int, bcConfiguredOK );
+epicsExportAddress(int, bcYearEpoch);
+epicsExportAddress(int, bcDebug);
 
