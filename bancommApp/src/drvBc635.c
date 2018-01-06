@@ -1123,7 +1123,7 @@ int NTPgetTime (struct tm *pGtime)
         return -1;            /* If error, return year as -1 */
     }
 
-    epicsTimeToTM(pGtime, &nSecDummy, &ets);  /* convert epicsTimeStamp to struct tm */
+    epicsTimeToGMTM(pGtime, &nSecDummy, &ets);  /* convert epicsTimeStamp to struct tm */
     return 0;
 }
 
