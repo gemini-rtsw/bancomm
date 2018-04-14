@@ -1289,7 +1289,7 @@ void bcSetRTC(void)
 
     /* in struct tm */
     sprintf(rtctime,"L%02d%02d%02d%02d%02d%02d",
-		    (gtime->tm_year)%100,gtime->tm_mon+1, gtime->tm_mday,
+		    (gtime->tm_year)%100,gtime->tm_mon+1, gtime->tm_mday-1,
 		    gtime->tm_hour, gtime->tm_min, gtime->tm_sec + 1);
     printf("TFP packet for RTC = %s\n",rtctime);
 
