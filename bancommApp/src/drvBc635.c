@@ -200,7 +200,8 @@ static int bcUseper;                  /* Whether to use BC periodics for sys clo
 static int bcConfiguredOK = 0;        /* Whether have a Bancomm at all */
 static int bcYearNumber = 42;         /* The current year number */
 static int bcYearEpoch = 0;           /* The epoch (wrt 1970) of Jan 1, Oh UTC of current year */
-static int bcDebug = 0;           /* The epoch (wrt 1970) of Jan 1, Oh UTC of current year */
+static int bcDebug = 0;               /* The epoch (wrt 1970) of Jan 1, Oh UTC of current year */
+static int bc_usec_ignore = 0;        /* IGNORE MicroSeconds BUG JIRA TASK (RTUPG-521). Default DON'T Ignore!*/
 static int bcLastEpoch = 0;           /* Last year's epoch, saved when year changes */
 static int bcIntPerTick = 1;          /* Number of interrupts per clock tick */
 static int bcIntCounter = 0;          /* Count all interrupts */
@@ -881,11 +882,11 @@ int bcRegsToTime (double *prval, unsigned char *stime)
         bcLastEpoch = bcYearEpoch;    /* Save last year's Epoch */
         bcSetEpoch(bcYearNumber);     /* Set start of year epoch */
     }
+
     hours = bcdtoi(stime[3]);
     minutes = bcdtoi(stime[4]);
-    useconds = (bcdtoi(stime[6]) * 100 + bcdtoi(stime[7])) * 100 +
-    bcdtoi(stime[8]);
     seconds = bcdtoi(stime[5]);
+    useconds = (bcdtoi(stime[6]) * 100 + bcdtoi(stime[7])) * 100 + bcdtoi(stime[8]);    
 
     *prval = (days-1) *86400.0
            + hours*3600.0
@@ -907,7 +908,7 @@ int bcRegsToTime (double *prval, unsigned char *stime)
         static int mycount;
         status = -1;
 
-        if(mycount%200 == 0) printf("days=%d, hours=%d, minutes=%d, seconds=%d, usecs=%ld\n",
+        if( !bc_usec_ignore && mycount%200 == 0) printf("days=%d, hours=%d, minutes=%d, seconds=%d, usecs=%ld\n",
                 days, hours, minutes, seconds, useconds);
 
         mycount++;
@@ -1657,4 +1658,5 @@ epicsExportAddress(int, bcTickCnt);
 epicsExportAddress(int, bcConfiguredOK );
 epicsExportAddress(int, bcYearEpoch);
 epicsExportAddress(int, bcDebug);
+epicsExportAddress(int, bc_usec_ignore);
 
