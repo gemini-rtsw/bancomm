@@ -226,6 +226,7 @@ static struct {
    epicsUInt32      bcThisIsMaster;        /* Flag, id master = TRUE; default is FALSE/slave */
    epicsUInt32      bcNoLeapSecs;          /* FLAG : TRUE => DON'T use GPS leap secs */
    epicsUInt32      bcOffset;              /* Offset relative to input reference in microsecs */
+   epicsUInt32      bcUseRTC;
 } bc635TimePvt;
 
 
@@ -417,11 +418,19 @@ long bc635_init()
      */
     if (bc635TimePvt.bcThisIsMaster)
     {
-        bcSendTfp("A6");        /* Master - set mode to GPS */
-        if ((bcGetGpsLeap()) == 0)    /* Strange if zero returned? */
-            printf("Error in Master IOC Bancomm 637 : GPS failed or absent?\n");
-        if ((bcGetGpsLeap()) < 0)
-            printf("bcGetGpsLeap Timed out - no Leap Seconds returned\n");
+        if (bc635TimePvt.bcUseRTC) {
+            /* make sure time offset is 0 */
+            bcSendTfp("M+00");            
+            bcSetRTC();             /* Set the clock to now*/
+            bcSendTfp("A3");        /* Slave - set mode to RTC Mode */
+        }
+        else {
+            bcSendTfp("A6");        /* Master - set mode to GPS */
+            if ((bcGetGpsLeap()) == 0)    /* Strange if zero returned? */
+                printf("Error in Master IOC Bancomm 637 : GPS failed or absent?\n");
+            if ((bcGetGpsLeap()) < 0)
+                printf("bcGetGpsLeap Timed out - no Leap Seconds returned\n");
+        }
     }
     else
     {
@@ -1281,14 +1290,14 @@ void bcSetRTC(void)
 
     /* in struct tm */
     sprintf(rtctime,"L%02d%02d%02d%02d%02d%02d",
-		    (gtime->tm_year)%100,gtime->tm_mon+1, gtime->tm_mday,
+		    (gtime->tm_year)%100,gtime->tm_mon+1, gtime->tm_mday-1,
 		    gtime->tm_hour, gtime->tm_min, gtime->tm_sec + 1);
     printf("TFP packet for RTC = %s\n",rtctime);
 
     /* wait for approx. next second tick */
     /* (void) taskDelay((int)(fracsec * clock_rate_get()) - 1); */
     //epicsThreadSleep((int)(fracsec * epicsThreadSleepQuantum()) - 1);
-    epicsThreadSleep(fracsec);
+    //epicsThreadSleep(fracsec);
     bcSendTfp(rtctime);
 }
 
@@ -1561,6 +1570,12 @@ int bc635TimeSetTpPrio(int prio)
    return 0;
 }
 
+void bcUseRTCMode () {
+
+    bc635TimePvt.bcUseRTC = 1;        /* Set the Master Mode A3 and manually set the time*/
+
+}
+
 /* Register these symbols for use by IOC code */
 /* Information needed by iocsh */
 static const iocshArg     bc635_reportArg0 = {"interest_level", iocshArgInt};
@@ -1618,9 +1633,22 @@ static void bc635TimeRegister(void) {
    iocshRegister(&bc635TimeSetTpPrioFuncDef, bc635TimeSetTpPrioCallFunc);
 }
 
+/*Test Functions*/
+static const iocshFuncDef bcSetRTCFuncDef ={"bcUseRTCMode", 0, NULL};
+static void bcSetRTCCallFunc(const iocshArgBuf *args)
+{
+    /*Call this on the shell before BCConfigure()*/
+    bcUseRTCMode();
+}
+
+static void BCTestFunctions(void) {
+   iocshRegister(&bcSetRTCFuncDef, bcSetRTCCallFunc);
+}
+
 epicsExportRegistrar(bc635TimeRegister);
 epicsExportRegistrar(bc635_reportRegister);
 epicsExportRegistrar(BCconfigureRegister);
+epicsExportRegistrar(BCTestFunctions);
 epicsExportAddress(int, altIntCounter1);
 epicsExportAddress(int, altIntCounter2);
 epicsExportAddress(int, bcReadCounter);

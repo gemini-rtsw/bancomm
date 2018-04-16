@@ -1,3 +1,7 @@
+*.swp
+*BAK.adl
+cdCommands
+envPaths
 *.bak
 O.*
 db
@@ -6,3 +10,5 @@ bin
 data
 include
 lib
+.git
+edl
