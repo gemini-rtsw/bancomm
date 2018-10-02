@@ -1,7 +1,10 @@
 TOP=../..
 include $(TOP)/configure/CONFIG
 
-LIBRARY_IOC_RTEMS += bancomm
+
+# Don't build for Linux
+LIBRARY_IOC_Linux = -nil-
+LIBRARY_IOC_DEFAULT += bancomm
 
 # The -fvolatile switch doesn't work on modern versions of GCC
 # Need to declare hardware registers as 'volatile' in the code.
