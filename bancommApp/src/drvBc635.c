@@ -106,6 +106,7 @@
 #include <errlog.h>
 #include <envDefs.h>
 #include <time.h> /*For timegm()*/
+#include <math.h> /* for fmod() */
 
 #include "bc635.h"
 #include "osdClockFuncs.h"
@@ -1023,11 +1024,13 @@ int bc635_write (const epicsUInt16 signal, const double value)
     if (signal == 3)
     {
         /* Check value is in range between midnight (0) and 23h59m59.999s */
-        if (value >= 86400.0 || value < 0.0) return -1;
+        // if (value >= 86400.0 || value < 0.0) return -1;
+        if (value < 0.0) return -1;
         else
         /* Value is OK : set Time Of Day for time coincidence interrupt */
         {
-            bc635_set_strobe(value);
+            double val = fmod(value, 86400.0);  /* can't set for more than 86400 */
+            bc635_set_strobe(val);
             pbc635->mask = pbc635->mask | 0x04;    /* Ensure interrupt source enabled */
             pbc635->intstat = pbc635->intstat | 0x04; /* Clear interrupt status */
             return OK;

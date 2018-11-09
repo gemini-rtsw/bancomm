@@ -14,6 +14,12 @@
 *
 * 2016/03/07 mdw   Removed vxWorks #includes. Code is now EPICS OSI compliant.
 * 2016/05/25 mdw   read_si now returns val if alarm is only MINOR.
+* 2018/11/09 mdw   input records would install interrupt handlers only if 'SCAN=I/O Intr' at
+*                  initialization time. This made it so that the record could not accept
+*                  a change to 'SCAN=I/O Intr' if it was initialized with a different SCAN
+*                  parameter. Now an input record will install the interrupt handler on initialization
+*                  if it's associated "signal" indicates that it is meant to be read in interrupt,
+*                  regardless of initial SCAN parameter.
 */
 
 
@@ -23,7 +29,8 @@
  * For signal 1, the time is read from the event time registers, which is only valid if the external
  * event interrupt is enabled and the interrupt has occurred.
  * For all other signals, the time is read from the current time registers.
- * If the record's SCAN field is set to 'I/O intr", then the record is processed according to it's signal"
+ *
+ * Signal 0: Don't install any interrupt handler. Read time passively or periodically only.
  * Signal 1: When an external event interrupt has occured
  * Signal 2: When the periodic pulse output interrupt has occurred. 
  * Signal 3: When the Time-Of-Day coincidence interrupt has occurred. 
@@ -114,17 +121,9 @@ static long init_record_ai (
 
     pvmeio = (struct vmeio *) &pai->inp.value;
 
-#if FALSE
-    if (pai->scan == SCAN_IO_EVENT &&
-	bc635IntEnable (pvmeio->signal, pvmeio->parm) != OK)
-
-    {
-	recGblRecordError(S_dev_vxWorksIntEnFail, (void *) pai,
-	    "devAiBc635 (init_record) BC635 interrupt enable error");
-    }
-#endif /* FALSE */
-					/* configure Bancomm hardware */
-    if (pai->scan == SCAN_IO_EVENT)
+    /* configure Bancomm hardware */
+    // if (pai->scan == SCAN_IO_EVENT)
+    if(pvmeio->signal > 0) 
 	(void) bc635IntEnable (pvmeio->signal, pvmeio->parm);
 
     pai->udf = FALSE;			/* record is now defined */
@@ -179,16 +178,8 @@ static long init_record_si (
 
     pvmeio = (struct vmeio *) &psi->inp.value;
 
-#if FALSE
-    if (psi->scan == SCAN_IO_EVENT &&
-	bc635IntEnable (pvmeio->signal, pvmeio->parm) != OK)
-    {
-	recGblRecordError (S_dev_vxWorksIntEnFail, (void *) psi,
-	    "devSiBc635 (init_record) BC635 interrupt enable error");
-    }
-#endif /* FALSE */
-					/* configure Bancomm hardware */
-    if (psi->scan == SCAN_IO_EVENT)
+    /* if (psi->scan == SCAN_IO_EVENT) */
+    if (pvmeio->signal > 0)
 	(void) bc635IntEnable (pvmeio->signal, pvmeio->parm);
 
     psi->udf = FALSE;
@@ -307,6 +298,7 @@ static long read_ai (
         status = bc635_event (&value);
     else
         status = bc635_read (&value);
+
 
     /*
     printf("read_ai: status=%ld, value=%f\n", status, value);
