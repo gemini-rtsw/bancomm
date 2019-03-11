@@ -49,8 +49,13 @@
 
 #include "osdClockFuncs.h"
 
+#ifndef OK
 #define OK 0
+#endif
+
+#ifndef ERROR
 #define ERROR (-1)
+#endif
 
  
 extern void	BCconfigure(const int, const int, const int, const int,
