@@ -1,6 +1,8 @@
 TOP=../..
 include $(TOP)/configure/CONFIG
 
+OLD_SHELL := $(SHELL)
+SHELL = $(warning Building $@$(if $<, (from $<))$(if $?, ($? newer)))$(OLD_SHELL) -x
 #----------------------------------------
 #  ADD MACRO DEFINITIONS AFTER THIS LINE
 
@@ -12,7 +14,7 @@ vpath %.db $(SYS_DB_PATHS)
 # Create and install (or just install) into <top>/db
 # databases, templates, substitutions like this
 #TDCT_CFG = ../tdct.cfg
-DEPSCHS = $(wildcard ../*.sch)
+#DEPSCHS = $(wildcard ../*.sch)
 DB += bctest.db
 
 include $(TOP)/configure/RULES
@@ -20,5 +22,3 @@ include $(TOP)/configure/RULES
 #  ADD RULES AFTER THIS LINE
 $(COMMON_DIR)/%.db: %.db
 	cp $< $@
-
-
