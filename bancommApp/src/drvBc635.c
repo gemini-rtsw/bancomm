@@ -179,6 +179,7 @@ static int bc635TimeGetCurrent(epicsTimeStamp *);
 int bc635TimeSetTpPrio(int);
 static void bcStartYearMonitor(initHookState state);
 static void bc635Time_Init(initHookState state);
+static void bc635_interrupt_task(void *p); 
 
 struct {
         long    number;
@@ -192,9 +193,9 @@ struct {
 
 epicsExportAddress(drvet, drvBc635);
 
+static epicsEventId intSvc;
 static bc635Regs_t  *pbc635 = NULL;   /* Pointer to bc635 register structure */
 static IOSCANPVT ioscanpvt[4];        /* I/O scan list pointers */
-static int HadPerint;                 /* Flag = TRUE when first periodic interrupt received */
 static int sysClkRateWas;             /* Saved value of system clock */
 static int tickFrequency;             /* System clock tick frequency */
 static int bcUseper;                  /* Whether to use BC periodics for sys clock */
@@ -380,7 +381,6 @@ int bcHardwareSetup (void)
         pbc635->dev_csr = 0x01;        /* Control bit 0 clears registers at offset 20 thru 2E */
         pbc635->cmd     = BC635CMD_1MHZ;    /* 1MHz output */
 
-        HadPerint = FALSE;        /* Flag to be set when a BC635 periodic interrupt occurs */
         bcUseper  = FALSE;        /* Flag  = whether to use BC periodics for sys clock */
         sysClkRateWas =  clock_rate_get();
         //sysClkRateWas = epicsThreadSleepQuantum();
@@ -456,6 +456,15 @@ long bc635_init()
 
     /*Register for init*/
      initHookRegister(bcStartYearMonitor);
+   
+
+    /* create a high priority task to deal with interrupts */
+    intSvc = epicsEventCreate(epicsEventEmpty);
+    epicsThreadCreate("bc635InterruptService",
+                    99,
+                    epicsThreadGetStackSize(epicsThreadStackMedium),
+                    (EPICSTHREADFUNC)bc635_interrupt_task, NULL); 
+ 
 
     return OK;
 }
@@ -527,64 +536,64 @@ long bc635_ioint_info (const epicsUInt16 signal, IOSCANPVT *ppvt)
 * NOMANUAL
 */
 
+static int doUserClockIntr;
 void isr_bc635 (void *p)
 {
-    register short intnum;
-    register epicsUInt16 tmask, bcistatus, bcimask;
+   /* First check for periodic interrupt */
+   if ( ((pbc635->intstat & 0x02) & pbc635->mask) != 0)
+   {
+      if (bcUseper)                /* Using BC periodics for system clock? */
+      {
+         /* Increment interrupt count i.e., we actually got this interrupt*/
+         bcIntCounter++;
 
-    bcistatus = pbc635->intstat;            /* Save copy of status register */
-    bcimask   = pbc635->mask;            /* Save copy of interrupt mask */
+         if (bcIntCounter % bcIntPerTick == 0) {   /* If right number of ticks */
+            bcTickCnt++;                           /* Increment tick announce count */
+            clock_tick();                          /* Announce system clock tick */
+         }
+         if (bcUsrClock != NULL) doUserClockIntr = 1;;
+      }
+      pbc635->intstat = pbc635->intstat | 0x02;    /* Clear interrupt status bit */
+   }
 
-    /* First check for periodic interrupt */
-    if ( ((bcistatus & 0x02) & bcimask) != 0)
-    {
-        if (bcUseper)                /* Using BC periodics for system clock? */
-        {
-            if (!HadPerint)            /* First Periodic Interrupt? */
-            {
-                HadPerint = TRUE;
+   /* let a high priority task deal with the other interrupts */
+   epicsEventSignal(intSvc);
 
-               //sysClockOff();
+}
 
-               //if(! (clock_rate_set(tickFrequency) == OK)) {
+static void bc635_interrupt_task(void *p) 
+{
+   register short intnum;
+   register epicsUInt16 tmask;
 
-	       //   /*Trap something here on error, but this is an ISR... so caution.*/	
-	       //}
-            }
+   while(1) {
+      epicsEventWait(intSvc);
 
-            /* Increment interrupt count i.e., we actually got this interrupt*/
-            bcIntCounter++;
-
-            /* Call user routine if it has been defined */
-            if (bcUsrClock != NULL) (*bcUsrClock)(bcIntCounter);
-
-            if (bcIntCounter % bcIntPerTick == 0) {    /* If right number of ticks */
-                bcTickCnt++;                             /* Increment tick announce count */
-                clock_tick();                          /* Announce system clock tick */
-            }
-        }
-        pbc635->intstat = pbc635->intstat | 0x02;    /* Clear interrupt status bit */
-    }
-
-    /* Other interrupts - not periodic pulse */
-    for (intnum = 1; intnum < 5; intnum++)
-    {
-        if (intnum != 2)
-        {
-
+      /* Other interrupts - not periodic pulse */
+      for (intnum = 1; intnum < 5; intnum++)
+      {
+         if (intnum != 2)
+         {
             tmask = 0x01 << (intnum - 1);        /* Test value for interrupt */
 
             altIntCounter1++;
+
             /* Check for interrupt bit set - request I/O scan, but only if ioscanpvt is valid */
-            if ( ((bcistatus & tmask) & bcimask) != 0)
+            if ( ((pbc635->intstat & tmask) & pbc635->mask) != 0)
             {
-	    	altIntCounter2++;
-                if (ioscanpvt[intnum-1] != NULL)
-                    scanIoRequest(ioscanpvt[intnum-1]);
-                pbc635->intstat = pbc635->intstat | tmask;   /* Clear interrupt status bit */
+	       altIntCounter2++;
+               if (ioscanpvt[intnum-1] != NULL)
+                  scanIoRequest(ioscanpvt[intnum-1]);   
+               pbc635->intstat = pbc635->intstat | tmask;   /* Clear interrupt status bit */
             }
-        }
-    }
+         }
+         else   /* Call user routine if it has been defined for the periodic interrupt */
+            if ( doUserClockIntr) {
+               if (bcUsrClock) (*bcUsrClock)(bcIntCounter);
+               doUserClockIntr = 0;
+            }
+      }
+   } // while(1)
 }
 
 
@@ -981,7 +990,6 @@ int bcClkRateSet (int intPerSecond, int intPerTick)
         pbc635->intstat = pbc635->intstat | 0x02;
                     /* Save tick frequency value */
         tickFrequency = intPerSecond/bcIntPerTick;
-        HadPerint = FALSE;               /* Wait for interrupt flag */
         bcUseper = TRUE;                 /* Set flag to use BC periodics */
         sysClockOff();                   /* disable system clock */
         clock_rate_set(tickFrequency);   /* set system tick rate */
