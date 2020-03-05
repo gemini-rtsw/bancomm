@@ -122,7 +122,7 @@ static long init_record_ai (
     pvmeio = (struct vmeio *) &pai->inp.value;
 
     /* configure Bancomm hardware */
-    // if (pai->scan == SCAN_IO_EVENT)
+
     if(pvmeio->signal > 0) 
 	(void) bc635IntEnable (pvmeio->signal, pvmeio->parm);
 
@@ -178,7 +178,7 @@ static long init_record_si (
 
     pvmeio = (struct vmeio *) &psi->inp.value;
 
-    /* if (psi->scan == SCAN_IO_EVENT) */
+
     if (pvmeio->signal > 0)
 	(void) bc635IntEnable (pvmeio->signal, pvmeio->parm);
 
