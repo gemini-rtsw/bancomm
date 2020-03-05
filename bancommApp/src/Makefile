@@ -13,6 +13,7 @@ LIBRARY_IOC_DEFAULT += bancomm
 
 
 DBD          += bancomm.dbd
+bancomm_DBD  += base.dbd
 bancomm_DBD  += bancommDev.dbd
 
 bancomm_SRCS += osdClockFuncs.c

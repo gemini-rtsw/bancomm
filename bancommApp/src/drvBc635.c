@@ -1559,9 +1559,17 @@ static int bc635TimeGetCurrent(epicsTimeStamp *pDest)
     }
 #endif
 
+/* 20200503 mdw - EPICS R7 eliminates epicsTimeERROR and implements several S_time_xxxx error codes instead.
+ * We'll use the new error code 'S_time_unsychronized' here, but for backward compatibility (i.e. we're using EPICS R3.14 or R3.15)
+ * we'll define it as (-1) if it's not already defined, which is what epicsTimeERROR was. */
+#ifndef S_time_unsynchronized
+#define S_time_unsynchronized (-1)
+#endif
+
     epicsMutexUnlock(bc635TimePvt.lock);
     if ((status & ~0x07) || bc635TimePvt.flywheeling)
-       return epicsTimeERROR;
+       // return epicsTimeERROR;
+       return S_time_unsynchronized;
     return epicsTimeOK;
 }
 
