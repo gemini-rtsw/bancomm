@@ -50,9 +50,12 @@ This is the module %{name}.
 %build
 #update environment from former rpm installations due to BuildRequires
 source /gem_base/etc/profile
+#start virtual framebuffer to have graphics for java
+Xvfb :1  -ac -nolisten tcp -nolisten unix &
 
 make distclean uninstall
 make
+killall Xvfb
 
 %install
 export DONT_STRIP=1
