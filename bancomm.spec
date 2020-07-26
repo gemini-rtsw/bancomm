@@ -48,6 +48,9 @@ This is the module %{name}.
 %setup -q 
 
 %build
+#update environment from former rpm installations due to BuildRequires
+source /etc/profile
+
 make distclean uninstall
 make
 
