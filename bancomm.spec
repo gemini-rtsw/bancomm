@@ -54,7 +54,7 @@ source /gem_base/etc/profile
 Xvfb :1  -ac -nolisten tcp -nolisten unix &
 
 make distclean uninstall
-make
+DISPLAY=:1 make
 killall Xvfb
 
 %install
