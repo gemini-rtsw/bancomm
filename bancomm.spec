@@ -51,6 +51,9 @@ This is the module %{name}.
 #update environment from former rpm installations due to BuildRequires
 source /gem_base/etc/profile
 
+# to build on headless systems when tdct is used
+alias java='java -Djava.awt.headless=true'
+
 make distclean uninstall
 make
 
