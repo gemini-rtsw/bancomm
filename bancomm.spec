@@ -49,7 +49,7 @@ This is the module %{name}.
 
 %build
 #update environment from former rpm installations due to BuildRequires
-source /etc/profile
+source /gem_base/etc/profile
 
 make distclean uninstall
 make
