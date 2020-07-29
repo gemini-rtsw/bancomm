@@ -93,6 +93,9 @@ rm -rf $RPM_BUILD_ROOT
    /%{_prefix}/%{name}/configure
 
 %changelog
+* Wed Jul 29 2020 fkraemer <fkraemer@gemini.edu> 3.15.8-1.6.13.202007297061afe
+- added tdct for build requirements (fkraemer@gemini.edu)
+
 * Wed Jul 29 2020 fkraemer <fkraemer@gemini.edu> 3.15.8-1.6.13.20200729d56413d
 - rolled back Xvfb stuff, tdct should work now removed gemini-ade dep as this
   is now pulled in by epics-base(-devel) (fkraemer@gemini.edu)
