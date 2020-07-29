@@ -93,6 +93,23 @@ rm -rf $RPM_BUILD_ROOT
    /%{_prefix}/%{name}/configure
 
 %changelog
+* Wed Jul 29 2020 fkraemer <fkraemer@gemini.edu> 3.15.8-1.6.13.20200729d56413d
+- rolled back Xvfb stuff, tdct should work now removed gemini-ade dep as this
+  is now pulled in by epics-base(-devel) (fkraemer@gemini.edu)
+- fixes to specfile (fkraemer@gemini.edu)
+- psmisc dep for killall cmd (fkraemer@gemini.edu)
+- don't build test database for now (fkraemer@gemini.edu)
+- configure DISPLAY variable (fkraemer@gemini.edu)
+- start xserver (fkraemer@gemini.edu)
+- one step back: delete the alias again (fkraemer@gemini.edu)
+- aliased java to 'java -Djava.awt.headless=true' to be able to build on
+  headless systems (fkraemer@gemini.edu)
+- source /gem_base/etc/profile (fkraemer@gemini.edu)
+- update environment in build section  of specfile (fkraemer@gemini.edu)
+- added gemini-ade dependency (fkraemer@gemini.edu)
+- fixed EPICS path (fkraemer@gemini.edu)
+- Changes for EPICS R3.15.6 (mwestfall@gemini.edu)
+
 * Thu Jul 23 2020 fkraemer <fkraemer@gemini.edu> 3.15.8-1.6.13.20200723e49c424
 - new package built with tito
 
