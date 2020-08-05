@@ -93,6 +93,12 @@ rm -rf $RPM_BUILD_ROOT
    /%{_prefix}/%{name}/configure
 
 %changelog
+* Wed Aug 05 2020 fkraemer <fkraemer@gemini.edu> 3.15.8-1.6.13.20200805052602c3de1
+- Release tag enriched with hour and minute (%%H%%M) to be able to build
+  several RPMs a day without messing up the repo (fkraemer@gemini.edu)
+- added epics-base-devel as dependecy for bancomm-devel (fkraemer@gemini.edu)
+- added tdct ass dependency for bancomm-devel (fkraemer@gemini.edu)
+
 * Wed Jul 29 2020 fkraemer <fkraemer@gemini.edu> 3.15.8-1.6.13.202007297061afe
 - added tdct for build requirements (fkraemer@gemini.edu)
 
