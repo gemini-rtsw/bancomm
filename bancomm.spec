@@ -82,7 +82,6 @@ rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-,root,root)
-#   /%{_prefix}/%{name}/bin
    /%{_prefix}/%{name}/lib
 
 %files devel
