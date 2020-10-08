@@ -20,7 +20,7 @@
 Summary: %{name} Package, a module for EPICS base
 Name: %{name}
 Version: 1.6.13
-Release: 2%{?dist}
+Release: 3%{?dist}
 License: EPICS Open License
 Group: Applications/Engineering
 Source0: %{name}-%{version}.tar.gz
@@ -92,6 +92,12 @@ rm -rf $RPM_BUILD_ROOT
    /%{_prefix}/%{name}/configure
 
 %changelog
+* Thu Oct 08 2020 fkraemer <fkraemer@gemini.edu> 1.6.13-3
+- New Bancomm documentation files
+- adjustments for imcluding configure/RELEASE.local from configure/RELEASE to
+  overwrite its configuration for testing purposes
+- Added support dbd file to be used by IOCs
+
 * Thu Oct 08 2020 fkraemer <fkraemer@gemini.edu> 1.6.13-2
 - applied new version/release scheme to be compliant with rpmbuild
   documentation 
