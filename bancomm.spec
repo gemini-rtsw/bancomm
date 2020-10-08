@@ -92,7 +92,10 @@ rm -rf $RPM_BUILD_ROOT
    /%{_prefix}/%{name}/configure
 
 %changelog
-* Wed Aug 05 2020 fkraemer <fkraemer@gemini.edu> 3.15.8-1.6.13.20200805052602c3de1
+* Fri Aug 28 2020 Felix Kraemer <fkraemer@gemini.edu> 3.15.8-1.6.13.2020082821049713ea1
+- adjustments for imcluding configure/RELEASE.local from configure/RELEASE to
+  overwrite its configuration for testing purposes (fkraemer@gemini.edu)
+- Added support dbd file to be used by IOCs (iarriagada@gemini.edu)
 - Release tag enriched with hour and minute (%%H%%M) to be able to build
   several RPMs a day without messing up the repo (fkraemer@gemini.edu)
 - added epics-base-devel as dependecy for bancomm-devel (fkraemer@gemini.edu)

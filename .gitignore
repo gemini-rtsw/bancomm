@@ -12,3 +12,4 @@ include
 lib
 .git
 edl
+/configure/RELEASE.local
