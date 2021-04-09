@@ -13,14 +13,15 @@ LIBRARY_IOC_DEFAULT += bancomm
 
 
 DBD          += bancomm.dbd
-DBD          += bancommSupp.dbd
+#DBD          += bancommSupp.dbd
 
 # bancommSupp.dbd will be built from these files:
-bancommSupp_DBD  += bancommDev.dbd
+#bancommSupp_DBD  += bancommDev.dbd
 
 # bancomm.dbd will be built from these files:
-bancomm_DBD  += $(bancommSupp_DBD)
+#bancomm_DBD  += $(bancommSupp_DBD)
 bancomm_DBD  += base.dbd
+bancomm_DBD  += bancommDev.dbd
 
 bancomm_SRCS += osdClockFuncs.c
 bancomm_SRCS += devBc635.c
