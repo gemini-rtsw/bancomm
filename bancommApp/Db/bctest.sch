@@ -14,7 +14,7 @@ w 2136 1107 100 0 n#9 ecalcs.ecalcs#28.FLNK 2016 1104 2256 1104 2256 720 576 720
 w 728 939 100 0 n#10 eais.todOnInterrupt.FLNK 680 936 776 936 776 1080 352 1080 352 1296 472 1296 estringinval.timestamp.SLNK
 w 792 1387 100 0 n#11 estringinval.timestamp.FLNK 728 1312 1200 1312 eais.getCurrentTime.SLNK
 s 312 165 100 0 This specified time must be in the range 0.0 (midnight) to 86399.999 (23h59m59.999s) inclusive.
-n 1877 1234 2463 1426 100
+n 1877 1226 2365 1426 100
 This assumes EPICS timezone is set to UTC
 [See $(EPICS)/base/configure/CONFIG_SITE_ENV ]
 Otherwise you will have subtract the number of seconds your
@@ -24,11 +24,10 @@ Divide by the number of seconds in a day
 and take remainder as number of seconds since
 midnight to set the TOD interrupt registers.
 _
-n 1957 507 2348 627 100
+n 1957 527 2289 627 100
 External Event interrupts are triggered
 by raising a signal on the VME backplane
 at Connector P2 pin C6.
-
 This still needs to be tested.
 _
 [cell use]
