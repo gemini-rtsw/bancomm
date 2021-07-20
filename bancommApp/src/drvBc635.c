@@ -163,7 +163,7 @@ typedef struct {
     epicsUInt16 res1[2];     /* Reserved */
     epicsUInt16 time_req;    /* Time Latch */
     epicsUInt8  time[10];    /* Requested Time */
-    epicsUInt16 event[5];    /* Event/Strobe Time */
+    epicsUInt16 event[10];    /* Event/Strobe Time */
     epicsUInt16 unlock;      /* Release Lockout/Capture time */
     epicsUInt16 ack;         /* Acknowledge */
     epicsUInt16 cmd;         /* Command */
@@ -231,6 +231,8 @@ static struct {
    epicsUInt32      bcUseRTC;
 } bc635TimePvt;
 
+epicsUInt16 latchTime();
+epicsUInt16 handleLockout();
 
 /* Declare pointer to user definable function called on each interrupt */
 void (*bcUsrClock)(const int icount) = NULL;
@@ -407,7 +409,7 @@ int bcHardwareSetup (void)
 long bc635_init()
 {
     int status;
-    char str_offset[9];            /* String for offset value */
+    char str_offset[10];            /* String for offset value */
 
     if (pbc635 == NULL)            /* Not previously setup? */
        if ((status = bcHardwareSetup()) != OK)
@@ -449,7 +451,7 @@ long bc635_init()
                     /* don't use GPS leap secs */
 
                     /* Set string for offset control */
-    sprintf(str_offset,"G%+08d",bc635TimePvt.bcOffset*10);
+    sprintf(str_offset,"G%+08hd",bc635TimePvt.bcOffset*10);
     bcSendTfp(str_offset);        /* Send packet G for offset control */
     bcSendTfp("M+00");            /* Time offset zero - */
                     /* display UTC unmodified */
@@ -691,7 +693,7 @@ int bc635IntEnable (const epicsUInt16 signal, const char *parm )
 {
     static int init = FALSE;
     int status;
-    epicsUInt16 intnum, imask, dummy;    /* Interrupt number and mask */
+    epicsUInt16 intnum, imask;    /* Interrupt number and mask */
 
     if( !init )
     {
@@ -725,7 +727,7 @@ int bc635IntEnable (const epicsUInt16 signal, const char *parm )
                 pbc635->cmd |= BC635CMD_EVENTEN | BC635CMD_LOCKEN;
                 if (*parm == '-')
                     pbc635->cmd |= BC635CMD_EVSENSE;
-                dummy = pbc635->unlock; /* Clear event capture lockout */
+		handleLockout();
                 printf("BC635 driver : external event interrupts enabled\n");
             break;
 
@@ -769,7 +771,6 @@ int bc635IntEnable (const epicsUInt16 signal, const char *parm )
 *
 */
 int bc635RegsRead(bancomm_t *target) {
-	epicsUInt16		dummy;
 	unsigned char		stime[10];
 	register int		lockKey;
 	int i;
@@ -778,7 +779,7 @@ int bc635RegsRead(bancomm_t *target) {
 		return ERROR;
 
 	lockKey = epicsInterruptLock();            /* Disable interrupts */
-	dummy = pbc635->time_req;        /* Latch time registers */
+        latchTime();              /* Latch time registers */
 	for(i=0; i<10; i++) {
 		stime[i] = pbc635->time[i];
 	}
@@ -809,7 +810,6 @@ int bc635RegsRead(bancomm_t *target) {
 /* prval = Current time as a double precision real number */
 int bc635_read (double *prval)
 {
-    epicsUInt16       dummy;
     static unsigned char stime[10];
     register int         lockKey;
     int                  i;
@@ -820,7 +820,7 @@ int bc635_read (double *prval)
     bcReadCounter++;
 
     lockKey = epicsInterruptLock();            /* Disable interrupts */
-    dummy = pbc635->time_req;        /* Latch time registers */
+    latchTime();                               /* Latch time registers */
     for(i=0; i<10; i++) {
         stime[i] = pbc635->time[i];
     }
@@ -845,7 +845,6 @@ int bc635_read (double *prval)
 int bc635_event (double *prval)
 {
 
-    epicsUInt16 dummy;
     static unsigned char etime[10];
     int i;
 
@@ -858,7 +857,7 @@ int bc635_event (double *prval)
         etime[i] = pbc635->event[i];
     }
 
-    dummy = pbc635->unlock;            /* Release lockout */
+    handleLockout();                      /* Release lockout */
     return bcRegsToTime(prval, etime);    /* Finish off */
 }
 
@@ -1286,12 +1285,12 @@ void bcSetRTC(void)
     char rtctime[14];
     epicsTimeStamp ets;
     struct timespec sp;
-    double fracsec;
+    /* double fracsec; */
     time_t utime;
 
     generalTimeGetExceptPriority(&ets, NULL, bc635TimeTpPrio); /* don't get current time from Bancomm board! */
     epicsTimeToTimespec(&sp, &ets); /* Convert EPICS timestamp to POSIX struct timespec */
-    fracsec = 1.0 - (sp.tv_nsec/1000000000.0);
+    /* fracsec = 1.0 - (sp.tv_nsec/1000000000.0); */
 
     /* NTP epoch is 1900 */
     utime = sp.tv_sec - TS_1900_TO_UNIX_EPOCH;
@@ -1300,7 +1299,7 @@ void bcSetRTC(void)
     gtime = gmtime(&utime);        /* Convert to broken down time */
 
     /* in struct tm */
-    sprintf(rtctime,"L%02d%02d%02d%02d%02d%02d",
+    sprintf(rtctime,"%02hd%02hd%02hd%02hd%02hd%02hd",
 		    (gtime->tm_year)%100,gtime->tm_mon+1, gtime->tm_mday-1,
 		    gtime->tm_hour, gtime->tm_min, gtime->tm_sec + 1);
     printf("TFP packet for RTC = %s\n",rtctime);
@@ -1594,6 +1593,34 @@ void bcUseRTCMode () {
     bc635TimePvt.bcUseRTC = 1;        /* Set the Master Mode A3 and manually set the time*/
 
 }
+/************************************************************************************************
+ *
+ * handleLockout -- 
+ *
+ *  Clear event Unlock capture lockout 
+ *
+ * RETURNS: N/A
+ */
+epicsUInt16 handleLockout()
+{
+   return (pbc635->unlock ); /* Clear event capture lockout */
+}
+
+
+
+/************************************************************************************************
+ *
+ * latchTime -- 
+ *
+ * Latch Time Registers
+ *
+ * RETURNS: N/A
+ */
+epicsUInt16 latchTime()
+{
+   return ( pbc635->time_req );
+}
+
 
 /* Register these symbols for use by IOC code */
 /* Information needed by iocsh */
