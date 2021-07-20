@@ -10,10 +10,10 @@ LIBRARY_IOC_DEFAULT += bancomm
 # Need to declare hardware registers as 'volatile' in the code.
 #USR_CFLAGS   += -O0
 #USR_CFLAGS   += -std=c99 --pedantic
+USR_CPPFLAGS += -DUSE_TYPED_RSET
 
-
+DBD          += bancommSupp.dbd
 DBD          += bancomm.dbd
-#DBD          += bancommSupp.dbd
 
 # bancommSupp.dbd will be built from these files:
 #bancommSupp_DBD  += bancommDev.dbd
@@ -22,6 +22,9 @@ DBD          += bancomm.dbd
 #bancomm_DBD  += $(bancommSupp_DBD)
 bancomm_DBD  += base.dbd
 bancomm_DBD  += bancommDev.dbd
+
+bancommSupp_DBD  += base.dbd
+bancommSupp_DBD  += bancommDev.dbd
 
 bancomm_SRCS += osdClockFuncs.c
 bancomm_SRCS += devBc635.c
