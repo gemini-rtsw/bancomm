@@ -140,7 +140,7 @@ static long init_record_ai (
 static long init_record_ao (
     struct aoRecord *pao)
 {
-    struct vmeio *pvmeio;
+    /* struct vmeio *pvmeio; */
 					/* output link must be VME_IO */
     if (pao->out.type != VME_IO)
     {
@@ -149,7 +149,7 @@ static long init_record_ao (
 	return S_db_badField;
     }
 					/* only passive scanning allowed */
-    pvmeio = (struct vmeio *) &pao->out.value;
+    /* pvmeio = (struct vmeio *) &pao->out.value; */
     if (pao->scan != SCAN_PASSIVE)
     {
 	recGblRecordError (S_db_badField, (void *) pao,
@@ -194,7 +194,7 @@ static long init_record_si (
 static long init_record_so (
     struct stringoutRecord *pso)
 {
-    struct vmeio *pvmeio;
+    /* struct vmeio *pvmeio; */
 					/* output link must be VME_IO */
     if (pso->out.type != VME_IO)
     {
@@ -203,7 +203,7 @@ static long init_record_so (
 	return S_db_badField;
     }
 					/* only passive scanning allowed */
-    pvmeio = (struct vmeio *) &pso->out.value;
+    /* pvmeio = (struct vmeio *) &pso->out.value; */
     if (pso->scan != SCAN_PASSIVE)
     {
 	recGblRecordError (S_db_badField, (void *) pso,
