@@ -20,7 +20,7 @@
 Summary: %{name} Package, a module for EPICS base
 Name: %{name}
 Version: 1.6.13
-Release: 3%{?dist}
+Release: 4%{?dist}
 License: EPICS Open License
 Group: Applications/Engineering
 Source0: %{name}-%{version}.tar.gz
@@ -92,6 +92,19 @@ rm -rf $RPM_BUILD_ROOT
    /%{_prefix}/%{name}/configure
 
 %changelog
+* Tue Oct 05 2021 Roberto Rojas <rrojas@gemini.edu> 1.6.13-4
+- E7F-69 bancomm readiness
+- E7F-69 bancomm readiness
+- closes issues #1 #2 #3 #4
+- base version for EPICS 7
+- base version for EPICS 7
+- base version for EPICS 7
+- base version for EPICS 7
+- base version for EPICS 7
+- base version for EPICS 7
+- base version for EPICS 7
+- New branch for EPICS 7 RTEMS 5
+
 * Thu Oct 08 2020 fkraemer <fkraemer@gemini.edu> 1.6.13-3
 - New Bancomm documentation files
 - adjustments for imcluding configure/RELEASE.local from configure/RELEASE to
