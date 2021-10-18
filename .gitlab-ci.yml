@@ -1,4 +1,3 @@
-
 include:
     project: 'nsf-noirlab/gemini/rtsw/gem-ci'
     ref: master
@@ -8,4 +7,4 @@ include:
       
 
 variables:
-    BASE_CONTAINER: ""
+    BASE_CONTAINER: "registry.gitlab.com/nsf-noirlab/gemini/rtsw/iocs/softtcs_mk/unstable/containerization:latest"
