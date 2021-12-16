@@ -14,3 +14,4 @@ lib
 edl
 /configure/RELEASE.local
 /configure/CONFIG_SITE.local
+docker-compose.yml
