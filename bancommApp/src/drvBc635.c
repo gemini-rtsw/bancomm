@@ -990,8 +990,8 @@ int bcClkRateSet (int intPerSecond, int intPerTick)
                     /* Save tick frequency value */
         tickFrequency = intPerSecond/bcIntPerTick;
         bcUseper = TRUE;                 /* Set flag to use BC periodics */
-        sysClockOff();                   /* disable system clock */
-        clock_rate_set(tickFrequency);   /* set system tick rate */
+        //sysClockOff();                   /* disable system clock */
+        //clock_rate_set(tickFrequency);   /* set system tick rate */
     }
     else
     {                    /* Input value was zero - */
